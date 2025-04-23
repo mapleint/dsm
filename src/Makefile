@@ -1,13 +1,24 @@
-CC = gcc --std=c17
-CFLAGS = -Wall -Wextra -pedantic
-TARGET = client
-OBJECTS = client.o
+CC = gcc
+CFLAGS = -g -Wall -Wextra -pedantic
+SERVER = server
+SERVER_OBJ = server.o
 
-$(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $(TARGET)
+CLIENT = client
+CLIENT_OBJ = client.o
 
-%.o: %.cpp
+OBJECTS = rpc.o
+
+DEFAULT:
+	echo "Give parameters bruh"
+
+$(CLIENT): $(CLIENT_OBJ) $(OBJECTS)
+	$(CC) $(CLIENT_OBJ) $(OBJECTS) -o $(CLIENT)
+
+$(SERVER): $(SERVER_OBJ) $(OBJECTS)
+	$(CC) $(SERVER_OBJ) $(OBJECTS) -o $(SERVER)
+
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm $(TARGET) $(OBJECTS)
+	rm -f $(SERVER) $(CLIENT) $(OBJECTS) $(CLIENT_OBJ) $(SERVER_OBJ) 

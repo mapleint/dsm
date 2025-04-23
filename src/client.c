@@ -1,9 +1,30 @@
+#include <sys/un.h>
+#include <netinet/in.h>
+
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/un.h>
+#include <stdbool.h>
+#include <string.h> 
+#include <assert.h>
 
-#include "moesi.h"
-#include "packet.h"
+//#include "moesi.h"
+//#include "packet.h"
+
+in_addr_t is_ipv4(char *str)
+{
+	assert("str must not be nullptr" && str);
+	char *p = strdup(str);
+	assert(p);
+	char ip[4];
+	int i = 0;
+	char *tok = strtok(p, ".");
+	for (i = 0; i < 4 && tok; i++) {
+		ip[i] = atoi(tok);
+		tok = strtok(NULL, ".");
+	}
+	free(p);
+	return *(int*)ip;
+}
 
 int main(int argc, char *argv[])
 {
@@ -19,5 +40,6 @@ int main(int argc, char *argv[])
 	}
 
 	printf("connecting to server %s\n", server_addr);
+	is_ipv4(server_addr);
 }
 

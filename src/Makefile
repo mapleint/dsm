@@ -8,8 +8,7 @@ CLIENT_OBJ = client.o
 
 OBJECTS = rpc.o
 
-DEFAULT:
-	echo "Give parameters bruh"
+ALL: $(CLIENT) $(SERVER)
 
 $(CLIENT): $(CLIENT_OBJ) $(OBJECTS)
 	$(CC) $(CLIENT_OBJ) $(OBJECTS) -o $(CLIENT)

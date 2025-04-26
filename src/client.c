@@ -9,6 +9,8 @@
 
 //#include "moesi.h"
 //#include "packet.h"
+#include "config.h"
+#include "rpc.h"
 
 in_addr_t is_ipv4(char *str)
 {
@@ -28,6 +30,7 @@ in_addr_t is_ipv4(char *str)
 
 int main(int argc, char *argv[])
 {
+	/*
 	char *server_addr = getenv("SERVER");
 
 	if (argc >= 2 && !server_addr) {
@@ -38,8 +41,14 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "SERVER not set\n");
 		exit(1);
 	}
-
+	
 	printf("connecting to server %s\n", server_addr);
 	is_ipv4(server_addr);
+	*/
+
+	struct socket s = create_un(DEFAULT_SERVER_FILE);
+	binds(&s);
+	connects(&s);
+	printf("connection successful\n");
 }
 

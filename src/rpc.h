@@ -1,22 +1,26 @@
 #ifndef RPC_H
 #define RPC_H
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/ip.h>
 
 struct socket {
-	int type;
 	int fd;
+	socklen_t len;
 	union {
-		struct sockaddr_un unix;
-		struct sockaddr_in ip;
+		struct sockaddr_un un;
+		struct sockaddr_in in;
 	};
 };
 
-socklen_t socklen(const struct socket* sock) {
-	if (sock->type == AF_INET) {
-		return sizeof(struct sockaddr_in);
-	}
-	return sizeof(struct sockaddr_un);
-}
+struct socket create_in(const char *idk);
+struct socket create_un(const char *path);
+
+// int sends(struct socket *s, void *buffer, size_t len);
+int binds(struct socket *s);
+int listens(struct socket *s);
+int accepts(struct socket *s);
+int connects(struct socket *s);
 
 #endif /* RPC_H */
 

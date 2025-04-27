@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -57,5 +58,39 @@ int binds(struct socket *s)
 int connects(struct socket *s)
 {
 	return connect(s->fd, (struct sockaddr *) &s->un, socklen(s));
+}
+
+int sends(int con, void *buf, unsigned len)
+{
+	unsigned sent = 0;
+	while (sent < len) {
+		int trans = write(con, (char*)buf + sent, len - sent);
+		if (trans < 0) {
+			perror("write");
+			return 0;
+		}
+		sent += trans;
+	}
+	return 1;
+}
+
+int recvs(int con, void *buf, unsigned len)
+{
+	unsigned recvd = 0;
+	while (recvd < len) {
+		int trans = read(con, (char*)buf + recvd, len - recvd);
+		if (trans < 0) {
+			perror("read");
+			return 0;
+		}
+		recvd += trans;
+	}
+	return 1;
+}
+
+
+
+int remote(int t, int func_id, void *input, void *output)
+{
 }
 

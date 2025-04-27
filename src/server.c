@@ -11,7 +11,6 @@ int main(int argc, char *argv[])
 	if (argc < 2) {
 		printf("defaulting to UNIX\n");
 	}
-
 	struct socket s = create_un(DEFAULT_SERVER_FILE);
 	printf("socket created\n");
 	if (binds(&s)) {
@@ -35,5 +34,8 @@ int main(int argc, char *argv[])
 	printf("server received %d bytes: %s\n", red, rb);
 	write(cfd, "pong", 5);
 	printf("server wrote pong\n");
+	if (1) {
+		unlink(DEFAULT_SERVER_FILE);
+	}
 	return 0;
 }

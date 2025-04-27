@@ -1,6 +1,7 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -47,8 +48,13 @@ int main(int argc, char *argv[])
 	*/
 
 	struct socket s = create_un(DEFAULT_SERVER_FILE);
-	binds(&s);
+	// binds(&s);
 	connects(&s);
 	printf("connection successful\n");
+	int sen = write(s.fd, "ping", 5);
+	printf("client wrote %d bytes\n", sen);
+	char rb[10] = { 0 };
+	int red = read(s.fd, rb, 5);
+	printf("client received %d bytes:%s\n", red, rb);
 }
 

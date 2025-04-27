@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -13,12 +14,26 @@ int main(int argc, char *argv[])
 
 	struct socket s = create_un(DEFAULT_SERVER_FILE);
 	printf("socket created\n");
-	binds(&s);
+	if (binds(&s)) {
+		perror("bind");
+	}
 	printf("socket bound\n");
-	listens(&s);
+	if (listens(&s)) {
+		perror("listen");
+	}
 	printf("listening on socket\n");
-	accepts(&s);
+	int cfd = accepts(&s);
+	if (cfd == -1) {
+		perror("accept");
+	}
 	printf("accepted connection\n");
-
+	char rb[10] = { 0 };
+	int red = read(cfd, rb, 5);
+	if (red < 0) {
+		perror("read");
+	}
+	printf("server received %d bytes: %s\n", red, rb);
+	write(cfd, "pong", 5);
+	printf("server wrote pong\n");
 	return 0;
 }

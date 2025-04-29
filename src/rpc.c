@@ -89,8 +89,59 @@ int recvs(int con, void *buf, unsigned len)
 }
 
 
-
-int remote(int t, int func_id, void *input, void *output)
+void ping(void *pparams, void *presult)
 {
+	struct ping_args *params = pparams;
+	struct ping_resp *result = presult;
+
+	if (strcmp(params->str, "PING") == 0) {
+		strcpy(result->str, "PONG");
+	} else {
+		strcpy(result->str, "FAIL");
+	}
+
+}
+
+
+struct rpc_inf rpc_inf_table[] = {
+	{NULL, -1, -1},
+	{ping, sizeof(struct ping_args), sizeof(struct ping_resp)},
+};
+
+int remote(int target, int func, void *input, void *output)
+{
+	struct rpc_inf *inf = rpc_inf_table + func;
+	sends(target, &func, sizeof(int));
+	sends(target, input, inf->param_sz);
+	recvs(target, output, inf->response_sz);
+	return 0;
+}
+
+void remote_handler(int caller)
+{
+	int func;
+
+	recvs(caller, &func, sizeof(int));
+	struct rpc_inf *inf = rpc_inf_table + func;
+
+	void *resp = malloc(inf->response_sz);
+	if (!resp) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+		return;
+	}
+	void *args = malloc(inf->param_sz);
+	if (!args) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+		return;
+	}
+
+	recvs(caller, args, inf->param_sz);
+
+	rpc_inf_table[func].handler(args, resp);
+	free(args);
+	sends(caller, resp, inf->param_sz);
+	free(resp);
 }
 

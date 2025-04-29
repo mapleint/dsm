@@ -27,16 +27,14 @@ int recvs(int sender, void *buf, unsigned len);
 int remote(int worker, int func_id, void *input, void *output);
 
 struct ping_args {
-	int kind;
-	char str[4];
+	char str[5];
 };
 
 struct ping_resp {
-	int kind;
-	char str[4];
+	char str[5];
 };
 
-void ping(struct ping_args*, struct ping_resp*);
+void ping(void* /*struct ping_args*/, void* /*struct ping_resp*/);
 
 enum rpc {
 	RPC_NA,
@@ -46,13 +44,11 @@ enum rpc {
 struct rpc_inf {
 	void (*handler)(void*,void*);
 	int param_sz;
-	int respoinse_sz;
+	int response_sz;
 };
 
-struct rpc_inf rpc_inf_table[] = {
-	{NULL, -1, -1},
-	{ping, sizeof(struct ping_args), sizeof(struct ping_resp)},
-};
+
+void remote_handler(int caller);
 
 #endif /* RPC_H */
 

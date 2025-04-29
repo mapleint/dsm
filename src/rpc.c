@@ -253,6 +253,10 @@ void remote_handler(int caller)
 	int func;
 
 	recvs(caller, &func, sizeof(int));
+	if (func < 0 || func >= RPC_MAX) {
+		close(caller);
+		return;
+	}
 	struct rpc_inf *inf = rpc_inf_table + func;
 
 	void *resp = malloc(inf->response_sz);

@@ -89,6 +89,8 @@ enum rpc {
 
 	RPC_load,
 	RPC_store,
+
+	RPC_MAX,
 };
 
 struct rpc_inf {

@@ -190,7 +190,6 @@ void load(void* pparams, void* presult)
 		}
 		memcpy(result->page, &resp.page, sizeof(resp.page));
 		result->st = SHARED;
-		break;
 	}
 
 }
@@ -217,7 +216,6 @@ void store(void* pparams, void* presult)
 			continue;
 		}
 		memcpy(result->page, &resp.page, sizeof(resp.page));
-		break;
 	}
 
 }

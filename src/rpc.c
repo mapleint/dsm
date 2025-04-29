@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,6 +113,8 @@ void ping(void *pparams, void *presult)
 
 }
 
+
+
 enum state mesi_st = INVALID;
 /* probe_(.*) rpcs should only be ran on clients */
 void probe_read(void* pparams, void* presult)
@@ -164,6 +167,26 @@ void probe_write(void* pparams, void* presult)
 	// if (modified) return mark_inavlid, page;
 	// if (shared) return mark_invalid;
 	// if (exclusive) return mark_invalid;
+}
+
+void probe_change_perm(void* pparams, void* presult)
+{
+    printf("pre probe %d\n", mesi_st);
+    struct pcp_resp *result = presult;
+    result->st = mesi_st;
+    if (mesi_st == INVALID) {
+        return;
+    }
+    struct pcp_args *params = pparams;
+    char* addr = params->addr;
+    int m_protect_perm = params->perm;
+
+    if (mprotect(addr, 4096, m_protect_perm) == -1) {
+        perror("mprotect");
+        exit(0);
+    }
+    printf("post probe %d\n", mesi_st);
+
 }
 
 /* load/store rpcs should only be ran on server */
@@ -220,6 +243,37 @@ void store(void* pparams, void* presult)
 
 }
 
+void change_perm(void* pparams, void* presult) {
+    struct change_perm_args *params = pparams;
+    struct change_perm_resp *result = presult;
+
+    char *addr = params->addr;
+    int perm = params->perm;
+
+    struct pcp_args args = { 0 };
+    struct pcp_resp resp = { 0 };
+    args.addr = addr;
+
+    int m_protect_perm = 0;
+    if (perm & F_READ) {
+        m_protect_perm |= PROT_READ;
+    }
+    if (perm & F_WRITE) {
+        m_protect_perm |= PROT_WRITE;
+    }
+    args.perm = m_protect_perm;
+
+    for (int i = 0; i < NUM_CLIENTS; i++) {
+        int client_fd = clients[i];
+        printf("probing %d\n", client_fd);
+        remote(client_fd, RPC_probe_change_perm, &args, &resp);
+        if (resp.st == INVALID) {
+            continue;
+        }
+        break;
+    }
+}
+
 struct rpc_inf rpc_inf_table[] = {
 	[RPC_NA] = {NULL, -1, -1},
 	[RPC_ping] = {ping,
@@ -229,12 +283,16 @@ struct rpc_inf rpc_inf_table[] = {
 	       	sizeof(struct pr_args), sizeof(struct pr_resp)},
 	[RPC_probe_write] = {probe_write,
 	       	sizeof(struct pw_args), sizeof(struct pw_resp)},
+    [RPC_probe_change_perm] = {change_perm,
+            sizeof(struct pcp_args), sizeof(struct pcp_resp)},
+
 
 	[RPC_load] = {load,
 	       	sizeof(struct load_args), sizeof(struct load_resp)},
 	[RPC_store] = {store,
 	       	sizeof(struct store_args), sizeof(struct store_resp)},
-
+    [RPC_change_perm] = {change_perm,
+            sizeof(struct change_perm_args), sizeof(struct change_perm_resp)}
 };
 
 int remote(int target, int func, void *input, void *output)

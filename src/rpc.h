@@ -54,6 +54,16 @@ struct pw_resp {
 	char page[4096];
 };
 
+struct pcp_args {
+    char *addr;
+    int perm;
+};
+
+struct pcp_resp {
+    enum state st;
+    char page[4096];
+};
+
 struct load_args {
 	char *addr;
 };
@@ -72,6 +82,21 @@ struct store_resp {
 	char page[4096];
 };
 
+struct change_perm_args {
+    char *addr;
+    int perm;
+};
+
+struct change_perm_resp {
+    enum state st;
+    char page[4096];
+};
+
+enum perm {
+    F_READ = 1 << 0,
+    F_WRITE = 1 << 1,
+};
+
 void ping(void* /*struct ping_args*/, void* /*struct ping_resp*/);
 
 void probe_read(void* /*struct pr_args*/, void* /*struct pr_resp*/);
@@ -86,9 +111,11 @@ enum rpc {
 
 	RPC_probe_read,
 	RPC_probe_write,
+    RPC_probe_change_perm,
 
 	RPC_load,
 	RPC_store,
+    RPC_change_perm,
 
 	RPC_MAX,
 };

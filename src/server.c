@@ -7,6 +7,8 @@
 #include "config.h"
 #include "rpc.h"
 
+#define NUM_CLIENTS 2
+
 int main(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -23,23 +25,26 @@ int main(int argc, char *argv[])
 		perror("listen");
 	}
 	printf("listening on socket\n");
-	int cfd = accepts(&s);
-	if (cfd == -1) {
-		perror("accept");
-	}
-	printf("accepted connection\n");
-
-	struct pollfd fds[1] = { 0 };
-
-	fds[0].events = POLLIN;
-	fds[0].fd = cfd;
+	struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
+	fds->fd = s.fd;
+	fds->events = POLLIN;
+	int connected = 0;
 	while (true) {
-		printf("polling\n");
-		poll(fds, 1, -1);
-		printf("poll returned\n");
-		for (int i = 0; i < sizeof(fds) / sizeof(*fds); i++) {
+		poll(fds, connected + 1, -1);
+		if (fds->revents & POLLIN) {
+			int j = ++connected;
+			int client_fd = accepts(&s);
+			if (client_fd == -1) {
+				perror("accept");
+			}
+			printf("accepted connection %d\n", client_fd);
+			fds[j].fd = client_fd;
+			fds[j].events = POLLIN;
+		}
+		for (int i = 1; i < connected + 1; i++) {
 			if (fds[i].revents & POLLIN) {
-				printf("handling\n");
+				// TODO: remove client on POLLHUP
+				printf("handling rpc from server %d\n", i);
 				remote_handler(fds[i].fd);
 			}
 		}

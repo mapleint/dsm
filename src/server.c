@@ -7,11 +7,9 @@
 #include "config.h"
 #include "rpc.h"
 
-#define NUM_CLIENTS 2
-
 struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
 
-int clients[NUM_CLIENTS] = { -1 };
+int clients[NUM_CLIENTS] = { -1, -1 };
 int request_socket;
 
 int main(int argc, char *argv[])

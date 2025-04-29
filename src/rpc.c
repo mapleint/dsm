@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include "rpc.h"
-
+#include "config.h"
 
 /* TODO:
  *
@@ -177,7 +177,7 @@ void load(void* pparams, void* presult)
 	struct pr_resp resp = { 0 };
 	args.addr = params->addr;
 	result->st = EXCLUSIVE;
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < NUM_CLIENTS; i++) {
 		int client_fd = clients[i];
 		if (client_fd == request_socket || client_fd < 0) {
 			continue;
@@ -204,7 +204,7 @@ void store(void* pparams, void* presult)
 	struct pw_resp resp = { 0 };
 	args.addr = params->addr;
 	result->st = MODIFIED;
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < NUM_CLIENTS; i++) {
 		int client_fd = clients[i];
 		if (client_fd == request_socket || client_fd < 0) {
 			continue;

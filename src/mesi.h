@@ -4,12 +4,12 @@
 #include "packet.h"
 
 enum state {
-    INVALID,
-    MODIFIED,
-    SHARED,
-    EXCLUSIVE,
+	INVALID,
+	MODIFIED,
+	SHARED,
+	EXCLUSIVE,
 /*
-OWNED, Owned state not useful with central server
+	OWNED, Owned state not useful with central server
 */
 };
 

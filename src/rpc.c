@@ -5,6 +5,16 @@
 
 #include "rpc.h"
 
+
+/* TODO:
+ *
+ * THIS IS THE DUMBEST BODGE I'VE PROGRAMMED
+ */
+
+extern int request_socket;
+extern int clients[];
+
+
 static socklen_t socklen(struct socket* sock) {
 	switch (sock->in.sin_family) {
 	case AF_INET:
@@ -102,10 +112,131 @@ void ping(void *pparams, void *presult)
 
 }
 
+enum state mesi_st = INVALID;
+/* probe_(.*) rpcs should only be ran on clients */
+void probe_read(void* pparams, void* presult)
+{
+	(void*)pparams;
+	struct pr_resp *result = presult;
+	result->st = mesi_st;
+	printf("pre probe %d\n", mesi_st);
+	// query page desc 
+	switch (mesi_st) {
+	case MODIFIED:
+	case EXCLUSIVE:
+		mesi_st = SHARED;
+		// MARK_RO(params->addr);
+	case SHARED:
+		// memcpy(params->); copy value
+	case INVALID:
+		break;
+	default:
+		// TODO: error handling here
+	}
+	printf("post probe %d\n", mesi_st);
+	
+	// if (invalid) return;
+	// if (modified) return mark_shared, page;
+	// if (shared) return mark_shared, parge;
+	// if (exclusive) return;
+
+}
+
+void probe_write(void* pparams, void* presult)
+{
+	printf("pre probe %d\n", mesi_st);
+	(void*)pparams;
+	struct pw_resp *result = presult;
+	result->st = mesi_st;
+	switch (mesi_st) {
+	case SHARED:
+	case MODIFIED:
+	case EXCLUSIVE:
+		// memcpy(params->, pg);
+		break;
+	case INVALID:
+		break;
+	}
+	mesi_st = INVALID;
+	printf("post probe %d\n", mesi_st);
+	// query page desc
+	// if (invalid) return;
+	// if (modified) return mark_inavlid, page;
+	// if (shared) return mark_invalid;
+	// if (exclusive) return mark_invalid;
+}
+
+/* load/store rpcs should only be ran on server */
+void load(void* pparams, void* presult)
+{
+	struct load_args *params = pparams;
+	struct load_resp *result = presult;
+
+	printf("load handler running\n");
+	struct pr_args args = { 0 };
+	struct pr_resp resp = { 0 };
+	args.addr = params->addr;
+	result->st = EXCLUSIVE;
+	for (int i = 0; i < 2; i++) {
+		int client_fd = clients[i];
+		if (client_fd == request_socket || client_fd < 0) {
+			continue;
+		}
+		printf("probing`%d\n", client_fd);
+		remote(client_fd, RPC_probe_read, &args, &resp);
+		printf("response from`%d\n", client_fd);
+		if (resp.st == INVALID) {
+			continue;
+		}
+		memcpy(result->page, &resp.page, sizeof(resp.page));
+		result->st = SHARED;
+		break;
+	}
+
+}
+
+void store(void* pparams, void* presult)
+{
+	struct store_args *params = pparams;
+	struct store_resp *result = presult;
+
+	printf("store handler running\n");
+	struct pw_args args = { 0 };
+	struct pw_resp resp = { 0 };
+	args.addr = params->addr;
+	result->st = MODIFIED;
+	for (int i = 0; i < 2; i++) {
+		int client_fd = clients[i];
+		if (client_fd == request_socket || client_fd < 0) {
+			continue;
+		}
+		printf("probing`%d\n", client_fd);
+		remote(client_fd, RPC_probe_write, &args, &resp);
+		printf("response from`%d\n", client_fd);
+		if (resp.st == INVALID) {
+			continue;
+		}
+		memcpy(result->page, &resp.page, sizeof(resp.page));
+		break;
+	}
+
+}
 
 struct rpc_inf rpc_inf_table[] = {
-	{NULL, -1, -1},
-	{ping, sizeof(struct ping_args), sizeof(struct ping_resp)},
+	[RPC_NA] = {NULL, -1, -1},
+	[RPC_ping] = {ping,
+	       	sizeof(struct ping_args), sizeof(struct ping_resp)},
+
+	[RPC_probe_read] = {probe_read,
+	       	sizeof(struct pr_args), sizeof(struct pr_resp)},
+	[RPC_probe_write] = {probe_write,
+	       	sizeof(struct pw_args), sizeof(struct pw_resp)},
+
+	[RPC_load] = {load,
+	       	sizeof(struct load_args), sizeof(struct load_resp)},
+	[RPC_store] = {store,
+	       	sizeof(struct store_args), sizeof(struct store_resp)},
+
 };
 
 int remote(int target, int func, void *input, void *output)
@@ -141,7 +272,7 @@ void remote_handler(int caller)
 
 	rpc_inf_table[func].handler(args, resp);
 	free(args);
-	sends(caller, resp, inf->param_sz);
+	sends(caller, resp, inf->response_sz);
 	free(resp);
 }
 

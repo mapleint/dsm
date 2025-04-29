@@ -9,6 +9,11 @@
 
 #define NUM_CLIENTS 2
 
+struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
+
+int clients[NUM_CLIENTS] = { -1 };
+int request_socket;
+
 int main(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -25,7 +30,7 @@ int main(int argc, char *argv[])
 		perror("listen");
 	}
 	printf("listening on socket\n");
-	struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
+
 	fds->fd = s.fd;
 	fds->events = POLLIN;
 	int connected = 0;
@@ -39,14 +44,17 @@ int main(int argc, char *argv[])
 			}
 			printf("accepted connection %d\n", client_fd);
 			fds[j].fd = client_fd;
+			clients[j-1] = client_fd;
 			fds[j].events = POLLIN;
 		}
 		for (int i = 1; i < connected + 1; i++) {
-			if (fds[i].revents & POLLIN) {
-				// TODO: remove client on POLLHUP
-				printf("handling rpc from server %d\n", i);
-				remote_handler(fds[i].fd);
+			if (!(fds[i].revents & POLLIN)) {
+				continue;
 			}
+			request_socket = fds[i].fd;
+			// TODO: remove client on POLLHUP
+			printf("handling rpc from server %d\n", fds[i].fd);
+			remote_handler(fds[i].fd);
 		}
 	}
 	return 0;

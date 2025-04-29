@@ -4,6 +4,8 @@
 #include <sys/un.h>
 #include <netinet/ip.h>
 
+#include "mesi.h"
+
 struct socket {
 	int fd;
 	socklen_t len;
@@ -34,11 +36,59 @@ struct ping_resp {
 	char str[5];
 };
 
+struct pr_args {
+	char *addr;
+};
+
+struct pr_resp {
+	enum state st;
+	char page[4096];
+};
+
+struct pw_args {
+	char *addr;
+};
+
+struct pw_resp {
+	enum state st;
+	char page[4096];
+};
+
+struct load_args {
+	char *addr;
+};
+
+struct load_resp {
+	enum state st;
+	char page[4096];
+};
+
+struct store_args {
+	char *addr;
+};
+
+struct store_resp {
+	enum state st;
+	char page[4096];
+};
+
 void ping(void* /*struct ping_args*/, void* /*struct ping_resp*/);
+
+void probe_read(void* /*struct pr_args*/, void* /*struct pr_resp*/);
+void probe_write(void* /*struct pw_args*/, void* /*struct pw_resp*/);
+
+void load(void* /*struct load_args*/, void* /*struct load_resp*/);
+void store(void* /*struct store_args*/, void* /*struct store_resp*/);
 
 enum rpc {
 	RPC_NA,
 	RPC_ping,
+
+	RPC_probe_read,
+	RPC_probe_write,
+
+	RPC_load,
+	RPC_store,
 };
 
 struct rpc_inf {

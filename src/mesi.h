@@ -1,19 +1,11 @@
-#ifndef MOESI_H
-#define MOESI_H
-
-#include "packet.h"
+#ifndef MESI_H
+#define MESI_H
 
 enum state {
 	INVALID,
 	MODIFIED,
 	SHARED,
 	EXCLUSIVE,
-/*
-	OWNED, Owned state not useful with central server
-*/
 };
 
-/* {probe read = 0, write = 1} */
-
-
-#endif /* MOESI_H */
+#endif /* MESI_H */

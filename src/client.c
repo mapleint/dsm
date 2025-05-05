@@ -49,31 +49,41 @@ int cstore(int s, void *addr)
 	mesi_st = resp.st;
 }
 
+// from	linux/arch/x86/mm/fault.c
+enum x86_pf_error_code {
+
+        PF_PROT         =               1 << 0,
+        PF_WRITE        =               1 << 1,
+        PF_USER         =               1 << 2,
+        PF_RSVD         =               1 << 3,
+	PF_INSTR        =               1 << 4,
+};
+
+
 struct socket s;
 
 void fault_handler(int sig, siginfo_t *info, void *ucontext) 
 {
-    int si_errno = info->si_errno;
-    int si_signo = info->si_signo;
-    void* addr = info->si_addr;
+	int si_errno = info->si_errno;
+	int si_signo = info->si_signo;
+	void* addr = info->si_addr;
 
-    ucontext_t *ctx = (ucontext_t*)ucontext;
-    int err_type = ctx->uc_mcontext.gregs[REG_ERR];
+	ucontext_t *ctx = (ucontext_t*)ucontext;
+	int err_type = ctx->uc_mcontext.gregs[REG_ERR];
 
-    assert(si_signo == SIGSEGV && "expected a segfault");
+	assert(si_signo == SIGSEGV && "expected a segfault");
 
-    if (err_type & 0x0) {
-        //Read error
-        cload(s.fd, addr);
-        return;
-    }
-    if (err_type & 0x1) {
-        //Write error
-        cstore(s.fd, addr);
-        return;
-    }
-    printf("not a read/write sigfault dafuq\n");
-    return;
+	if (err_type & PF_WRITE) {
+		//Write error
+		// cstore(s.fd, addr);
+		printf("write fault\n");
+		exit(1);
+	} else {
+		//Read error
+		// cload(s.fd, addr);
+		printf("read fault\n");
+		exit(1);
+	}
 }
 
 /* do not use the following two, current bodge */
@@ -82,19 +92,19 @@ int clients[5];
 
 int main(int argc, char *argv[])
 {
+	// Initializing the signal handler
+	struct sigaction sa = {
+		.sa_sigaction = fault_handler,
+		.sa_flags = SA_SIGINFO,
+	};
+	sigaction(SIGSEGV, &sa, NULL);
+
 	s = create_un(DEFAULT_SERVER_FILE);
 	if (connects(&s)) {
 		perror("connect");
 		return 1;
 	}
 	printf("connection successful\n");
-
-    // Initializing the signal handler
-    struct sigaction sa = {
-        .sa_sigaction = fault_handler,
-        .sa_flags = SA_SIGINFO,
-    };
-    sigaction(SIGSEGV, &sa, NULL);
 
 	struct pollfd fds[2] = { 0 };
 
@@ -111,13 +121,13 @@ int main(int argc, char *argv[])
 		}
 		short stdin_revents = fds[1].revents;
 		if (stdin_revents & POLLIN) {
-			scanf("%s", buf);
+			fgets(buf, sizeof(buf), stdin);
 			switch (buf[0]) {
 			case 'w':
-				cstore(s.fd, 0);
+				
 				break;
 			case 'r':
-				cload(s.fd, 0);
+
 				break;
 			case 'p':
 				cping(s.fd);

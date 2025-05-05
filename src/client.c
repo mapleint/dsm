@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <ucontext.h>
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -10,8 +12,6 @@
 #include <assert.h>
 #include <poll.h>
 
-//#include "moesi.h"
-//#include "packet.h"
 #include "config.h"
 #include "rpc.h"
 
@@ -49,41 +49,31 @@ int cstore(int s, void *addr)
 	mesi_st = resp.st;
 }
 
+struct socket s;
+
 void fault_handler(int sig, siginfo_t *info, void *ucontext) 
 {
     int si_errno = info->si_errno;
     int si_signo = info->si_signo;
     void* addr = info->si_addr;
-    int si_fd = info->si_fd;
 
     ucontext_t *ctx = (ucontext_t*)ucontext;
     int err_type = ctx->uc_mcontext.gregs[REG_ERR];
 
-    if (si_signo != SIGSEGV) {
-        printf("not a sigfault da fuq\n");
-        return;
-    }
+    assert(si_signo == SIGSEGV && "expected a segfault");
+
     if (err_type & 0x0) {
         //Read error
-        struct socket s = create_un(DEFAULT_SERVER_FILE);
         cload(s.fd, addr);
         return;
     }
     if (err_type & 0x1) {
         //Write error
-        struct socket s = create_un(DEFAULT_SERVER_FILE);
         cstore(s.fd, addr);
         return;
     }
     printf("not a read/write sigfault dafuq\n");
     return;
-}
-
-int change_perm(int s, void *addr, int perm) 
-{
-    struct change_perm_args args = {.addr = addr, .perm = perm};
-    struct store_resp resp = {0};
-    remote(s, RPC_change_perm, &args, &resp);
 }
 
 /* do not use the following two, current bodge */
@@ -92,8 +82,7 @@ int clients[5];
 
 int main(int argc, char *argv[])
 {
-
-	struct socket s = create_un(DEFAULT_SERVER_FILE);
+	s = create_un(DEFAULT_SERVER_FILE);
 	if (connects(&s)) {
 		perror("connect");
 		return 1;

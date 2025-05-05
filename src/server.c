@@ -9,11 +9,15 @@
 
 struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
 
-int clients[NUM_CLIENTS] = { -1, -1 };
+int clients[NUM_CLIENTS];
 int request_socket;
 
 int main(int argc, char *argv[])
 {
+	for (int i = 0; i < NUM_CLIENTS; i++) {
+		clients[i] = -1;
+	}
+
 	if (argc < 2) {
 		printf("defaulting to UNIX\n");
 		unlink(DEFAULT_SERVER_FILE);

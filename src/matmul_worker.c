@@ -14,7 +14,7 @@ struct spawn_args {
     char *dest;
 };
 
-void *spawn(void *func_args) {
+void *spawn(void* func_args) {
     //Getting shmem addresses of the arrays
     //assert(argc == 7);
     struct spawn_args* args = (struct spawn_args *) func_args;

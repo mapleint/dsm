@@ -72,6 +72,17 @@ struct store_resp {
 	char page[4096];
 };
 
+struct sched_args {
+    void (*func)(void*);
+    int m1;
+    int n1;
+    int m2;
+    int n2;
+    char* addr1;
+    char* addr2;
+    char* dest;
+};
+
 void ping(void* /*struct ping_args*/, void* /*struct ping_resp*/);
 
 void probe_read(void* /*struct pr_args*/, void* /*struct pr_resp*/);

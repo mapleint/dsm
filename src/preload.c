@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <stdarg.h>
 #include "memory.h"
+#include <pthreads.h>
 
 // Define a function pointer type for printf
 typedef int (*printf_t)(const char *format, ...);
@@ -45,10 +46,8 @@ void* mmap( void *addr, size_t len, int prot, int flags, int fd, off_t offset) {
         }
     }
 
-    return original_mmap(addr, len, prot, PROT_NONE, fd, offset);
+    return original_mmap(addr, len, PROT_NONE, flags, fd, offset);
 }
-
-
 
 /*
 

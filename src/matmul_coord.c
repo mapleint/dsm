@@ -59,6 +59,15 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    mmap((void*)SHMEM_00, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+    mmap((void*)SHMEM_01, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+    mmap((void*)SHMEM_10, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+    mmap((void*)SHMEM_11, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0); 
+    mmap((void*)dest_00, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+    mmap((void*)dest_01, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+    mmap((void*)dest_10, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+    mmap((void*)dest_11, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
+
     pthread_t thread_00; 
     pthread_t thread_01; 
     pthread_t thread_10; 

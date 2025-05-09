@@ -14,8 +14,52 @@
 
 #include "config.h"
 #include "rpc.h"
+#include "memory.h"
 
-int cping(int s)
+struct page_entry {
+	void *addr;
+	enum state st;
+};
+
+#define NUM_ENTRIES 256
+
+struct page_entry pe_cache[NUM_ENTRIES];
+
+struct page_entry *insert_page(void *addr, enum state st)
+{
+	for (int i = 0; i < NUM_ENTRIES; i++) {
+		if (pe_cache[i].st == INVALID || pe_cache[i].addr == addr) {
+			pe_cache[i].addr = addr;
+			pe_cache[i].st = st;
+			return &pe_cache[i];
+		}
+	}
+	return NULL;
+}
+
+struct page_entry *find_page(void *addr)
+{
+	for (int i = 0; i < NUM_ENTRIES; i++) {
+		if (pe_cache[i].addr == addr) {
+			return &pe_cache[i];
+		}
+	}
+	return NULL;
+
+}
+
+bool delete_page(void *addr)
+{
+	struct page_entry *entry = find_page(addr);
+	if (!entry->addr) {
+		return false;
+	}
+	entry->st = INVALID;
+	entry->addr = NULL;
+	return true;
+}
+
+void cping(int s)
 {
 	struct ping_args args = { 0 };
 	struct ping_resp resp = { 0 };
@@ -24,29 +68,34 @@ int cping(int s)
 	printf("%s\n", resp.str);
 }
 
-extern enum state mesi_st;
-int cload(int s, void *addr)
+void cload(int s, void *addr)
 {
-	if (mesi_st == MODIFIED) return;
+	addr = page_align(addr);
 	struct load_args args = { .addr = addr };
 	struct load_resp resp = { 0 };
 	remote(s, RPC_load, &args, &resp);
-	mesi_st = resp.st;
-
+	r_prot(addr);
+	assert(insert_page(addr, resp.st)); // TODO flesh out this logic
 }
 
-int cstore(int s, void *addr)
+void cstore(int s, void *addr)
 {
-	if (mesi_st == MODIFIED) return;
-	if (mesi_st == EXCLUSIVE) {
-		// mark as write
-		mesi_st = MODIFIED;
-		return;
+	addr = page_align(addr);
+	struct page_entry *pe = find_page(addr);
+	if (pe && pe->st == EXCLUSIVE) {
+		// if we have it exclusive, we can skip the RPC
+		goto skip;
+	} else if (!pe) {
+		pe = insert_page(addr, INVALID);
 	}
+	assert(pe && "might need to make cache larger");
+
 	struct store_args args = { .addr = addr };
 	struct store_resp resp = { 0 };
 	remote(s, RPC_store, &args, &resp);
-	mesi_st = resp.st;
+skip:
+	rw_prot(pe->addr);
+	pe->st = MODIFIED;
 }
 
 // from	linux/arch/x86/mm/fault.c
@@ -64,25 +113,20 @@ struct socket s;
 
 void fault_handler(int sig, siginfo_t *info, void *ucontext) 
 {
-	int si_errno = info->si_errno;
-	int si_signo = info->si_signo;
+	// int si_errno = info->si_errno;
 	void* addr = info->si_addr;
 
 	ucontext_t *ctx = (ucontext_t*)ucontext;
 	int err_type = ctx->uc_mcontext.gregs[REG_ERR];
 
-	assert(si_signo == SIGSEGV && "expected a segfault");
+	assert(sig == SIGSEGV && "expected a segfault");
 
 	if (err_type & PF_WRITE) {
 		//Write error
-		// cstore(s.fd, addr);
-		printf("write fault\n");
-		exit(1);
+		cstore(s.fd, addr);
 	} else {
 		//Read error
-		// cload(s.fd, addr);
-		printf("read fault\n");
-		exit(1);
+		cload(s.fd, addr);
 	}
 }
 
@@ -122,12 +166,14 @@ int main(int argc, char *argv[])
 		short stdin_revents = fds[1].revents;
 		if (stdin_revents & POLLIN) {
 			fgets(buf, sizeof(buf), stdin);
+			char *global = (char*)shmem;
 			switch (buf[0]) {
 			case 'w':
-				
+				printf("writing %d\n");
+				strcpy(global, buf);
 				break;
 			case 'r':
-
+				printf("reading global:\n%s\n", global);
 				break;
 			case 'p':
 				cping(s.fd);
@@ -138,7 +184,6 @@ int main(int argc, char *argv[])
 				printf("bad command :(\n");
 				break;
 			}
-			printf("mesi %d\n", mesi_st);
 		}
 	}
 

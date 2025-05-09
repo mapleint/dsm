@@ -51,8 +51,11 @@ void cstore(int s, void *addr)
 	struct store_resp resp = { 0 };
 	remote(s, RPC_store, &args, &resp);
 skip:
-	rw_prot(pe->addr);
+	printf("cstore addr %p\n", addr);
+
+	rw_prot(addr);
 	pe->st = MODIFIED;
+	printf("exiting cstore\n");
 }
 
 // from	linux/arch/x86/mm/fault.c
@@ -72,6 +75,7 @@ void fault_handler(int sig, siginfo_t *info, void *ucontext)
 {
 	// int si_errno = info->si_errno;
 	void* addr = info->si_addr;
+	printf("fault addr %p\n", addr);
 
 	ucontext_t *ctx = (ucontext_t*)ucontext;
 	int err_type = ctx->uc_mcontext.gregs[REG_ERR];
@@ -93,6 +97,7 @@ int clients[5];
 
 int main(int argc, char *argv[])
 {
+	shmem_init();
 	// Initializing the signal handler
 	struct sigaction sa = {
 		.sa_sigaction = fault_handler,
@@ -126,11 +131,14 @@ int main(int argc, char *argv[])
 			char *global = (char*)shmem;
 			switch (buf[0]) {
 			case 'w':
-				printf("writing %d\n");
+				printf("writing\n");
 				strcpy(global, buf);
+				printf("wrote\n");
 				break;
 			case 'r':
-				printf("reading global:\n%s\n", global);
+				printf("reading global\n");
+				strcpy(buf, global);
+				printf("read\n");
 				break;
 			case 'p':
 				cping(s.fd);

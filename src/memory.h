@@ -27,7 +27,10 @@ static inline void r_prot(void *page)
 
 static inline void rw_prot(void *page)
 {
-	mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE);
+	if (mprotect(page, PAGE_SIZE, PROT_READ | PROT_WRITE)) {
+		printf("mprotect %p\n", page);
+		perror("mprotect");
+	}
 }
 
 static inline void no_prot(void *page)
@@ -41,7 +44,7 @@ static void *shmem;
 static inline void *page_align(void *addr)
 {
 	uintptr_t page = (uintptr_t)addr;
-	page = ~0xFFFLL;
+	page &= ~0xFFFLL;
 	return (void*)page;
 }
 

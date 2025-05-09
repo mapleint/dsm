@@ -80,6 +80,10 @@ void probe_write(void* /*struct pw_args*/, void* /*struct pw_resp*/);
 void load(void* /*struct load_args*/, void* /*struct load_resp*/);
 void store(void* /*struct store_args*/, void* /*struct store_resp*/);
 
+void sched(void* /*struct sched_args*/, void* /*struct sched_resp*/);
+void run(void* /*struct run_args*/, void* /*struct run_resp*/);
+void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/);
+
 enum rpc {
 	RPC_NA,
 	RPC_ping,
@@ -89,6 +93,9 @@ enum rpc {
 
 	RPC_load,
 	RPC_store,
+
+	RPC_run,
+	RPC_wait,
 
 	RPC_MAX,
 };

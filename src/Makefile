@@ -6,7 +6,7 @@ SERVER_OBJ = server.o
 CLIENT = client
 CLIENT_OBJ = client.o
 
-OBJECTS = rpc.o
+OBJECTS = rpc.o memory.o
 
 ALL: $(CLIENT) $(SERVER)
 

@@ -5,6 +5,7 @@
 
 #include "rpc.h"
 #include "config.h"
+#include "memory.h"
 
 /* TODO:
  *
@@ -14,6 +15,7 @@
 extern int request_socket;
 extern int clients[];
 
+extern struct page_entry pe_cache[NUM_ENTRIES];
 
 static socklen_t socklen(struct socket* sock) {
 	switch (sock->in.sin_family) {
@@ -111,29 +113,27 @@ void ping(void *pparams, void *presult)
 	}
 
 }
-
-enum state mesi_st = INVALID;
 /* probe_(.*) rpcs should only be ran on clients */
 void probe_read(void* pparams, void* presult)
 {
-	(void*)pparams;
+	struct pr_args *args = pparams;
 	struct pr_resp *result = presult;
-	result->st = mesi_st;
-	printf("pre probe %d\n", mesi_st);
+	// TODO lookup by addr
+	struct page_entry *pe = find_page(args->addr);
+	enum state st = pe ? pe->st : INVALID;
+	printf("pre probe %d\n", st);
 	// query page desc 
-	switch (mesi_st) {
+	switch (st) {
 	case MODIFIED:
 	case EXCLUSIVE:
-		mesi_st = SHARED;
+		st = SHARED;
 		// MARK_RO(params->addr);
 	case SHARED:
 		// memcpy(params->); copy value
 	case INVALID:
 		break;
-	default:
-		// TODO: error handling here
 	}
-	printf("post probe %d\n", mesi_st);
+	printf("post probe %d\n", st);
 	
 	// if (invalid) return;
 	// if (modified) return mark_shared, page;
@@ -144,11 +144,11 @@ void probe_read(void* pparams, void* presult)
 
 void probe_write(void* pparams, void* presult)
 {
-	printf("pre probe %d\n", mesi_st);
-	(void*)pparams;
+	struct pw_args *args = pparams;
 	struct pw_resp *result = presult;
-	result->st = mesi_st;
-	switch (mesi_st) {
+	struct page_entry *pe = find_page(args->addr);
+	enum state st = pe ? pe->st : INVALID;
+	switch (st) {
 	case SHARED:
 	case MODIFIED:
 	case EXCLUSIVE:
@@ -157,8 +157,8 @@ void probe_write(void* pparams, void* presult)
 	case INVALID:
 		break;
 	}
-	mesi_st = INVALID;
-	printf("post probe %d\n", mesi_st);
+	st = INVALID;
+	printf("post probe %d\n", st);
 	// query page desc
 	// if (invalid) return;
 	// if (modified) return mark_inavlid, page;
@@ -276,5 +276,25 @@ void remote_handler(int caller)
 	free(args);
 	sends(caller, resp, inf->response_sz);
 	free(resp);
+}
+
+void sched(void* sched_args, void* sched_resp)
+{
+	// finds a slave to run procedure
+	// currently just a simple round robin approach
+	static int i = 0;
+	i = (i + 1) % NUM_CLIENTS;
+	// remote(i, RPC_run, args, resp);
+
+}
+
+void run(void* /*struct run_args*/, void* /*struct run_resp*/)
+{
+
+}
+
+void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/)
+{
+
 }
 

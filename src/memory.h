@@ -3,6 +3,17 @@
 
 #include <sys/mman.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
+#include "mesi.h"
+
+#define NUM_ENTRIES 256
+
+struct page_entry {
+	void *addr;
+	enum state st;
+};
 
 #define PAGE_SIZE 4096
 
@@ -34,7 +45,7 @@ static inline void *page_align(void *addr)
 	return (void*)page;
 }
 
-void shmem_init()
+static void shmem_init()
 {
 	shmem = mmap(SHMEM_BASE, SHMEM_LEN, PROT_NONE, 
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
@@ -45,6 +56,12 @@ void shmem_init()
 	}
 }
 
+
+struct page_entry *insert_page(void *addr, enum state st);
+
+struct page_entry *find_page(void *addr);
+
+bool delete_page(void *addr);
 
 #endif /* MEMORY_H */
 

@@ -4,25 +4,29 @@
 #include "rpc.h"
 #include "client.c"
 
-int main(int argc, char* argv[]) {
-    shmem_init();
+struct spawn_args {
+    int m1;
+    int n1;
+    int m2;
+    int n2;
+    char *addr1;
+    char *addr2;
+    char *dest;
+};
 
-    struct sigaction sa = {
-        .sa_sigaction = fault_handler,
-        .sa_flags = SA_SIGINFO,
-    };
-    sigaction(SIGSEGV, &sa, NULL);
-
+void *spawn(void *func_args) {
     //Getting shmem addresses of the arrays
-    assert(argc == 7);
-    int m1 = atoi(argv[0]);
-    int n1 = atoi(argv[1]);
-    int m2 = atoi(argv[2]);
-    int n2 = atoi(argv[3]);
+    //assert(argc == 7);
+    struct spawn_args* args = (struct spawn_args *) func_args;
+    int m1 = args->m1;
+    int n1 = args->n1;
+    int m2 = args->m2;
+    int n2 = args->n2;
     assert(n1 == m2);
-    char *addr1 = argv[0];
-    char *addr2 = argv[1];
-    char *dest = argv[2];
+    char *addr1 = args->addr1;
+    char *addr2 = args->addr2;
+    char *dest = args->dest;
+    
     
     //Getting arrays from addresses
     int **arr1 = (int**)addr1;
@@ -48,4 +52,6 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < m1; ++i) {
         memcpy(dest + i*n2*sizeof(int), res_arr[i], n2*sizeof(int));
     }
+    return NULL;
 }
+

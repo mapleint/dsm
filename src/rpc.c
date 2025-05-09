@@ -121,15 +121,16 @@ void probe_read(void* pparams, void* presult)
 	// TODO lookup by addr
 	struct page_entry *pe = find_page(args->addr);
 	enum state st = pe ? pe->st : INVALID;
+	result->st = st;
 	printf("pre probe %d\n", st);
 	// query page desc 
 	switch (st) {
 	case MODIFIED:
 	case EXCLUSIVE:
 		st = SHARED;
-		// MARK_RO(params->addr);
+		r_prot(args->addr);
 	case SHARED:
-		// memcpy(params->); copy value
+		memcpy(&result->page, args->addr, PAGE_SIZE);
 	case INVALID:
 		break;
 	}
@@ -148,16 +149,18 @@ void probe_write(void* pparams, void* presult)
 	struct pw_resp *result = presult;
 	struct page_entry *pe = find_page(args->addr);
 	enum state st = pe ? pe->st : INVALID;
+	result->st = st;
 	switch (st) {
 	case SHARED:
 	case MODIFIED:
 	case EXCLUSIVE:
-		// memcpy(params->, pg);
+		memcpy(result->page, args->addr, PAGE_SIZE);
 		break;
 	case INVALID:
 		break;
 	}
 	st = INVALID;
+	no_prot(args->addr);
 	printf("post probe %d\n", st);
 	// query page desc
 	// if (invalid) return;
@@ -188,6 +191,7 @@ void load(void* pparams, void* presult)
 		if (resp.st == INVALID) {
 			continue;
 		}
+		printf("pg data %s\n", &resp.page);
 		memcpy(result->page, &resp.page, sizeof(resp.page));
 		result->st = SHARED;
 	}

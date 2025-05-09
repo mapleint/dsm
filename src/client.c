@@ -31,6 +31,8 @@ void cload(int s, void *addr)
 	struct load_args args = { .addr = addr };
 	struct load_resp resp = { 0 };
 	remote(s, RPC_load, &args, &resp);
+	rw_prot(addr);
+	memcpy(addr, resp.page, PAGE_SIZE);
 	r_prot(addr);
 	assert(insert_page(addr, resp.st)); // TODO flesh out this logic
 }
@@ -54,6 +56,7 @@ skip:
 	printf("cstore addr %p\n", addr);
 
 	rw_prot(addr);
+	memcpy(addr, resp.page, PAGE_SIZE);
 	pe->st = MODIFIED;
 	printf("exiting cstore\n");
 }
@@ -138,7 +141,7 @@ int main(int argc, char *argv[])
 			case 'r':
 				printf("reading global\n");
 				strcpy(buf, global);
-				printf("read\n");
+				printf("read %s\n", buf);
 				break;
 			case 'p':
 				cping(s.fd);

@@ -9,8 +9,8 @@
 
 struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
 
-int clients[NUM_CLIENTS];
-int request_socket;
+extern int request_socket;
+extern int clients[NUM_CLIENTS];
 
 int main(int argc, char *argv[])
 {

@@ -14,8 +14,9 @@
  * THIS IS THE DUMBEST BODGE I'VE PROGRAMMED
  */
 
-extern int request_socket;
-extern int clients[];
+/* do not use the following two, current bodge */
+int request_socket;
+int clients[NUM_CLIENTS];
 
 extern struct page_entry pe_cache[NUM_ENTRIES];
 

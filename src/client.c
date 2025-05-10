@@ -94,9 +94,6 @@ void fault_handler(int sig, siginfo_t *info, void *ucontext)
 	}
 }
 
-/* do not use the following two, current bodge */
-int request_socket;
-int clients[5];
 
 int main(int argc, char *argv[])
 {

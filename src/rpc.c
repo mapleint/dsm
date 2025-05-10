@@ -9,11 +9,6 @@
 #include <signal.h>
 #include <pthread.h>
 
-/* TODO:
- *
- * THIS IS THE DUMBEST BODGE I'VE PROGRAMMED
- */
-
 /* do not use the following two, current bodge */
 int request_socket;
 int clients[NUM_CLIENTS];

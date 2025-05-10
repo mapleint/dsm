@@ -1,7 +1,60 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+#include <string.h>
 #include <pthread.h>
-#include <matmul_worker.c>
+#include "../src/memory.h"
+
+struct spawn_args {
+    int m1;
+    int n1;
+    int m2;
+    int n2;
+    char *addr1;
+    char *addr2;
+    char *dest;
+};
+
+void *spawn(void* func_args) {
+    //Getting shmem addresses of the arrays
+    //assert(argc == 7);
+    struct spawn_args* args = (struct spawn_args *) func_args;
+    int m1 = args->m1;
+    int n1 = args->n1;
+    int m2 = args->m2;
+    int n2 = args->n2;
+    assert(n1 == m2);
+    char *addr1 = args->addr1;
+    char *addr2 = args->addr2;
+    char *dest = args->dest;
+    
+    
+    //Getting arrays from addresses
+    int **arr1 = (int**)addr1;
+    int **arr2 = (int**)addr2;
+
+    int** res_arr = malloc(m1 * sizeof(int*));
+    for (int i = 0; i < m1; ++i) {
+        res_arr[i] = malloc(n2*sizeof(int));
+    }
+
+    //Doing matmul
+
+    for (int i = 0; i < m1; ++i) {
+        for (int j = 0; j < n2; ++j) {
+            res_arr[i][j] = 0;
+            for (int k = 0; k < n1; ++k) {
+                res_arr[i][j] += arr1[i][k]*arr2[k][j];
+            }
+        }
+    }
+
+    //Copying to dest addr
+    for (int i = 0; i < m1; ++i) {
+        memcpy(dest + i*n2*sizeof(int), res_arr[i], n2*sizeof(int));
+    }
+    return NULL;
+}
 
 #define SHMEM_00 SHMEM_BASE + PAGE_SIZE
 #define SHMEM_01 SHMEM_BASE + 2*PAGE_SIZE
@@ -32,14 +85,8 @@ int arr2[4][4] = {
     {4, 4, 7, 2},
 };
 
-int main(int argc, char* argv[]) {
-    shmem_init();
-
-    struct sigaction sa = {
-        .sa_sigaction = fault_handler,
-        .sa_flags = SA_SIGINFO,
-    };
-    sigaction(SIGSEGV, &sa, NULL);
+int main() {
+    mmap((void*)SHMEM_00, PAGE_SIZE*8, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
     // Storing the shared memory
     for (int i = 0; i < m1; ++i) {
@@ -59,14 +106,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    mmap((void*)SHMEM_00, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
-    mmap((void*)SHMEM_01, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
-    mmap((void*)SHMEM_10, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
-    mmap((void*)SHMEM_11, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0); 
-    mmap((void*)dest_00, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
-    mmap((void*)dest_01, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
-    mmap((void*)dest_10, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
-    mmap((void*)dest_11, PAGE_SIZE, PROT_READ | PROT_WRITE, 0, 0, 0);
 
     pthread_t thread_00; 
     pthread_t thread_01; 
@@ -109,3 +148,4 @@ int main(int argc, char* argv[]) {
     }
 
 }
+

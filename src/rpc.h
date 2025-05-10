@@ -72,7 +72,13 @@ struct store_resp {
 	char page[4096];
 };
 
-struct sched_args {
+
+struct run_args {
+	void (*func)(void*);
+	size_t argslen, resplen;
+};
+
+struct matmul_args {
     void (*func)(void*);
     int m1;
     int n1;
@@ -107,6 +113,7 @@ enum rpc {
 
 	RPC_run,
 	RPC_wait,
+	RPC_sched,
 
 	RPC_MAX,
 };

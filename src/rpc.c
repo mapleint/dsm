@@ -9,7 +9,6 @@
 #include <signal.h>
 #include <pthread.h>
 
-/* do not use the following two, current bodge */
 int request_socket;
 int clients[NUM_CLIENTS];
 
@@ -237,6 +236,15 @@ struct rpc_inf rpc_inf_table[] = {
 	[RPC_store] = {store,
 	       	sizeof(struct store_args), sizeof(struct store_resp)},
 
+	[RPC_run] = {run,
+	       	sizeof(struct run_args), 0},
+
+	[RPC_sched] = {sched,
+	       	sizeof(struct run_args), 0},
+
+	[RPC_wait] = {wait,
+	       	0, 0},
+
 };
 
 int remote(int target, int func, void *input, void *output)
@@ -248,9 +256,22 @@ int remote(int target, int func, void *input, void *output)
 	return 0;
 }
 
+
+int remote_varsz(int target, int func, void *input, void *output, int inp_sz)
+{
+	struct rpc_inf *inf = rpc_inf_table + func;
+	sends(target, &func, sizeof(int));
+	sends(target, input, inf->param_sz);
+	sends(target, inf->param_sz + (char*)input, inp_sz);
+	recvs(target, output, inf->response_sz);
+	return 0;
+}
+
+
 void remote_handler(int caller)
 {
 	int func;
+	request_socket = caller;
 
 	recvs(caller, &func, sizeof(int));
 	if (func < 0 || func >= RPC_MAX) {
@@ -280,38 +301,29 @@ void remote_handler(int caller)
 	free(resp);
 }
 
-void sched(void* sched_args, void* sched_resp)
+void sched(void* p_args, void* sched_resp)
 {
+	struct run_args *args = p_args;
 	// finds a slave to run procedure
 	// currently just a simple round robin approach
-    static int i = 0;
-    while (clients[i] != request_socket) {
-	    i = (i + 1) % NUM_CLIENTS;
-    }
+	static int i = 0;
+	while (clients[i] != request_socket) {
+		i = (i + 1) % NUM_CLIENTS;
+	}
 
-    remote(clients[i], RPC_run, sched_args, sched_resp);
-	// remote(i, RPC_run, args, resp);
+	remote_varsz(clients[i], RPC_run, p_args, sched_resp, args->argslen);
 
 }
 
-void run(void* run_args, void* run_resp)
+void run(void* p_args, void* run_resp)
 {
-    pthread_t thread;
+	pthread_t thread;
 
+	struct run_args *args = p_args;
+	void *inst_args = malloc(args->argslen);
+	recvs(request_socket, inst_args, args->argslen);
 
-    struct sched_args* sched_args = (struct sched_args*) run_args;
-
-    struct spawn_args {
-        int m1;
-        int n1;
-        int m2;
-        int n2;
-        char *addr1;
-        char *addr2;
-        char *dest;
-    };
-    struct spawn_args args = {sched_args->m1, sched_args->n1, sched_args->m2, sched_args->n2, sched_args->addr1, sched_args->addr2, sched_args->dest};
-    pthread_create(&thread, NULL, (void*)(sched_args->func), &args);
+	pthread_create(&thread, NULL, args->func, &inst_args);
 
 }
 

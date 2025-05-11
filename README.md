@@ -73,6 +73,9 @@ Userfaultfd would work with this a little bit, we can write protect ranges, but 
   
 ### Safety  
 This program has a lot of pitfalls when it comes to thread safety, this is because we can not normally atomically write and write protect a page. As a result, if two threads are writing, it is possible that one thread will fault, the other will fail to fault because the page was unprotected in cstore and is immediately get clobbered by the memcpy in cstore. We do not know of a fix for this sans moving to userfaultfd, which explicitly supports copying a data into a page to resolve a fault.  
+
+### ASLR
+ASLR (Address Space Layout Randomization) a security mechanism that mitigates binary exploitation, and is enabled by default in compilation. In order for our workers to coordinate correctly, they have to agree on what addresses store what data. One possible way is to treat addresses as signed offsets from the base of the binary, or in the example code of our client, mmap'ing memory with a hyper-specific address chosen. We have elected to do the simple solution, and declare that ASLR is for the weak who cannot write safe code to begin with.
   
 ### Atomic Instructions  
 Atomic instructions on x86-64 are architecturally defined to still remain atomic on x86, even across cache or even page lines. Currently, our code doesn't explicitly handle instructions but they do fault as writes, and will only go through should we hold both pages.  
@@ -83,8 +86,8 @@ Fortunately, we only support x86-64 as our signal handler depends on architectur
   
 ### Statically linked binaries
 Plenty of binaries are statically linked, be it to avoid the overhead of the procedure linkage table, for security, or reliability. Our LD_PRELOAD trick works, albeit we no longer get to hook functions. 
+
 ## Applications  
-  
 ### Matrix Multiplication  
   
 We can use our DSM server on matrix multiplication. Consider the following setup:  

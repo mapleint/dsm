@@ -318,8 +318,8 @@ struct rpc_inf rpc_inf_table[] = {
 	[RPC_sched] = {sched,
 	       	sizeof(struct run_args), 0},
 
-	[RPC_wait] = {wait,
-	       	0, 0},
+	[RPC_exec] = {exec_main,
+	       	0, sizeof(int)},
 
 };
 
@@ -360,16 +360,6 @@ int remote(int target, int func, void *input, void *output)
 }
 
 
-int remote_varsz(int target, int func, void *input, void *output, int inp_sz)
-{
-	struct rpc_inf *inf = rpc_inf_table + func;
-	sends(target, &func, sizeof(int));
-	sends(target, input, inf->param_sz);
-	sends(target, inf->param_sz + (char*)input, inp_sz);
-	recvs(target, output, inf->response_sz);
-	return 0;
-}
-
 struct remote_handler_args {
 	int fd;
 	int func;
@@ -395,9 +385,6 @@ void run(void* p_args, void* run_resp)
 
 	struct run_args *args = p_args;
 	void *inst_args = malloc(args->argslen);
-	recvs(request_socket, inst_args, args->argslen);
-
-	pthread_create(&thread, NULL, args->func, &inst_args);
 
 }
 
@@ -432,16 +419,14 @@ void sched(void* p_args, void* sched_resp)
 		i = (i + 1) % NUM_CLIENTS;
 	}
 
-	remote_varsz(clients[i], RPC_run, p_args, sched_resp, args->argslen);
 
 }
 
-void wait(void* vargs, void *vresp)
+void exec_main(__attribute((unused)) void* vargs, void *vresp)
 {
-	struct wait_args *args = pargs;
-	struct wait_resp *resp = presp;
-
-	pthread_join();
+	int *pexitcode = vresp;
+	*pexitcode = 0;
+	printf("raking exit 0\n");
 }
 
 void handle_s(int caller)

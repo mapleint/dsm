@@ -1,3 +1,5 @@
+#include "client.c"
+
 #include <stdio.h>
 #include <dlfcn.h>
 #include <stdarg.h>
@@ -49,14 +51,9 @@ void* mmap( void *addr, size_t len, int prot, int flags, int fd, off_t offset) {
     return original_mmap(addr, len, PROT_NONE, flags, fd, offset);
 }
 
-/*
-
-#include <stdlib.h>
-
 
 void __attribute__((constructor)) init(void)
 {
 	printf("preload running\n");
 	exit(0);
 }
-*/

@@ -14,6 +14,15 @@ struct pollfd fds[NUM_CLIENTS] = { 0 };
 extern __thread int request_socket;
 extern int clients[NUM_CLIENTS];
 
+void *run_main(__attribute((unused)) void *args)
+{
+	int return_code = -1;
+	remote(clients[0], RPC_exec, NULL, &return_code);
+	printf("'exitied' with code %d\n", return_code);
+	// exit(return_code);
+	return NULL;
+}
+
 int main(int argc, char *argv[])
 {
 	for (int i = 0; i < NUM_CLIENTS; i++) {
@@ -47,17 +56,22 @@ int main(int argc, char *argv[])
 		if (client_fd == -1) {
 			perror("accept");
 		}
-		printf("accepted connection %d\n", client_fd);
+		printf("accepted connection fd = %d\n", client_fd);
 		int i = connected;
 		clients[i] = client_fd;
 		fds[i].fd = client_fd;
 		fds[i].events = POLLIN;
 		connected++;
 	}
-
+	printf("clients have connected, waiting to execute\n");
+	getchar();
+	printf("executing server\n");
+	pthread_t master;
+	pthread_create(&master, NULL, run_main, NULL);
+	
 	while (true) {
 		poll(fds, NUM_CLIENTS, -1);
-		for (int i = 0; i < connected + 1; i++) {
+		for (int i = 0; i < connected; i++) {
 			if (!(fds[i].revents & POLLIN)) {
 				continue;
 			}

@@ -114,8 +114,11 @@ enum rpc {
 	RPC_load,
 	RPC_store,
 
-	RPC_run,
 	RPC_wait,
+
+	RPC_variadic,
+
+	RPC_run,
 	RPC_sched,
 
 	RPC_MAX,
@@ -126,7 +129,6 @@ struct rpc_inf {
 	int param_sz;
 	int response_sz;
 };
-
 
 void handle_s(int caller);
 void *async_remote_handler(void *caller_fd);

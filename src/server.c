@@ -56,14 +56,19 @@ int main(int argc, char *argv[])
 	}
 
 	while (true) {
-		poll(fds, connected, -1);
+		poll(fds, NUM_CLIENTS, -1);
 		for (int i = 0; i < connected + 1; i++) {
 			if (!(fds[i].revents & POLLIN)) {
 				continue;
 			}
 			request_socket = fds[i].fd;
-			// TODO: remove client on POLLHUP
-			printf("handling rpc from server %d\n", fds[i].fd);
+			if (fds[i].revents & POLLHUP) {
+				printf("client %d hungup\n", i);
+				connected--;
+				close(fds[i].fd);
+				continue;
+			}
+			printf("handling rpc from client #%d=%d\n", i, fds[i].fd);
 			handle_s(fds[i].fd);
 		}
 	}

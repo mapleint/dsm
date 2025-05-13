@@ -332,7 +332,11 @@ int remote(int target, int func, void *input, void *output)
 	// lock();
 	sends(target, &func, sizeof(int));
 	sends(target, &rpc_nonce, sizeof(int));
-	sends(target, input, inf->param_sz);
+	if (func < RPC_variadic) {
+		sends(target, input, inf->param_sz);
+	} else {
+		sends(target, input, *(int*)(input) + sizeof(int));
+	}
 	// unlock();
 	
 	
@@ -432,9 +436,12 @@ void sched(void* p_args, void* sched_resp)
 
 }
 
-void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/)
+void wait(void* vargs, void *vresp)
 {
+	struct wait_args *args = pargs;
+	struct wait_resp *resp = presp;
 
+	pthread_join();
 }
 
 void handle_s(int caller)
@@ -475,16 +482,24 @@ void handle_s(int caller)
 	// otherwise its a request
 	struct rpc_inf *inf = rpc_inf_table + func;
 	printf("remote message was an RPC with no %d\n", func);
+	int nonce = -1;
+	recvs(caller, &nonce, sizeof(nonce));
+	int len = inf->param_sz;
+	void *args; 
+	if (func < RPC_variadic) {
+		args = malloc(inf->param_sz);
+	} else {
+		recvs(caller, &len, sizeof(int));
+		args = malloc(len);
+		if (args) *(int*)args = len;
+	}
 
-	void *args = malloc(inf->param_sz);
 	if (!args) {
 		perror("malloc");
 		exit(EXIT_FAILURE);
 		return;
 	}
-	int nonce = -1;
-	recvs(caller, &nonce, sizeof(nonce));
-	recvs(caller, args, inf->param_sz);
+	recvs(caller, args, len);
 	pthread_t worker;
 	struct remote_handler_args *in = malloc(sizeof(struct remote_handler_args));
 	if (!in) {

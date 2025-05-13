@@ -72,10 +72,10 @@ struct store_resp {
 	char page[4096];
 };
 
-
-struct run_args {
-	void *(*func)(void*);
-	size_t argslen, resplen;
+struct thread_args {
+	const pthread_attr_t *restrict attr;
+	void *(*start_routine)(void*);
+	void *restrict arg;
 };
 
 void ping(void* /*struct ping_args*/, void* /*struct ping_resp*/);
@@ -105,11 +105,10 @@ enum rpc {
 
 	RPC_exec,
 
-	RPC_variadic,
-
 	RPC_run,
 	RPC_sched,
 
+	RPC_variadic,
 	RPC_MAX,
 };
 

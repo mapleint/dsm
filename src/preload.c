@@ -34,6 +34,18 @@ int listen_loop(int argc, char **argv, char **envp)
 
 }
 
+int remote_pthread_create(const pthread_attr_t *restrict attr,
+		void *(*start_routine)(void*),
+		void *restrict arg)
+{
+	struct thread_args args = { 
+		.attr = attr, 
+		.start_routine = start_routine,
+	       	.arg = arg };
+	remote(s.fd, RPC_sched, &args, NULL);
+
+}
+
 typedef int (*pthread_create_t) (pthread_t *restrict thread,
 	       	const pthread_attr_t *restrict attr,
 		void *(*start_routine)(void*),
@@ -52,7 +64,7 @@ int pthread_create(pthread_t *restrict thread,
 			return -1;
 		}
 	}
-	return pthread_create(thread, attr, start_routine, arg);
+	return original_pthread_create(thread, attr, start_routine, arg);
 }
 
 // hook __libc_start_main

@@ -64,7 +64,6 @@ int main(int argc, char *argv[])
 			printf("handling rpc from server %d\n", fds[i].fd);
 			handle_s(fds[i].fd);
 		}
-		sleep(1);
 	}
 	return 0;
 }

@@ -34,15 +34,36 @@ int listen_loop(int argc, char **argv, char **envp)
 
 }
 
+typedef int (*pthread_create_t) (pthread_t *restrict thread,
+	       	const pthread_attr_t *restrict attr,
+		void *(*start_routine)(void*),
+		void *restrict arg);
+pthread_create_t original_pthread_create;
+int pthread_create(pthread_t *restrict thread,
+		const pthread_attr_t *restrict attr,
+		void *(*start_routine)(void*),
+		void *restrict arg)
+{
+	printf("bro really tried threading in the big 2025\n");
+	if (!original_pthread_create) {
+		original_pthread_create = (pthread_create_t)dlsym(RTLD_NEXT, "pthread_create");
+		if (!original_pthread_create) {
+			fprintf(stderr, "Error: Could not find original pthread_create function.\n");
+			return -1;
+		}
+	}
+	return pthread_create(thread, attr, start_routine, arg);
+}
+
 // hook __libc_start_main
 int __libc_start_main(
-    int (*main)(int, char **, char **),
-    int argc,
-    char **ubp_av,
-    void (*init)(void),
-    void (*fini)(void),
-    void (*rtld_fini)(void),
-    void *stack_end
+	int (*main)(int, char **, char **),
+	int argc,
+	char **ubp_av,
+	void (*init)(void),
+	void (*fini)(void),
+	void (*rtld_fini)(void),
+	void *stack_end
 ) {
 	real_main = main;
 

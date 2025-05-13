@@ -14,6 +14,8 @@
 __thread int request_socket;
 int clients[NUM_CLIENTS];
 
+pthread_create_t original_pthread_create = pthread_create;
+
 extern struct page_entry pe_cache[NUM_ENTRIES];
 
 struct rpc_wake {
@@ -383,8 +385,8 @@ void run(void* p_args, void* run_resp)
 {
 	pthread_t thread;
 	struct thread_args *args = p_args;
-	pthread_create(&thread, args->attr, args->start_routine, args->arg);
-
+	original_pthread_create(&thread, args->attr, args->start_routine, args->arg);
+	pthread_join(thread, NULL);
 }
 
 void remote_handler(int caller, int func, int nonce, void *args)
@@ -414,9 +416,7 @@ void sched(void* p_args, void* sched_resp)
 	// finds a slave to run procedure
 	// currently just a simple round robin approach
 	static int i = 0;
-	while (clients[i] != request_socket) {
-		i = (i + 1) % NUM_CLIENTS;
-	}
+	i = (i + 1) % NUM_CLIENTS;
 	remote(clients[i], RPC_run, &args, NULL);
 
 }
@@ -510,7 +510,7 @@ void handle_s(int caller)
 	in->nonce = nonce;
 	in->args = args;
 
-	pthread_create(&worker, NULL, async_remote_handler, in);
+	original_pthread_create(&worker, NULL, async_remote_handler, in);
 	pthread_detach(worker);
 }
 

@@ -46,11 +46,7 @@ int remote_pthread_create(const pthread_attr_t *restrict attr,
 
 }
 
-typedef int (*pthread_create_t) (pthread_t *restrict thread,
-	       	const pthread_attr_t *restrict attr,
-		void *(*start_routine)(void*),
-		void *restrict arg);
-pthread_create_t original_pthread_create;
+extern pthread_create_t original_pthread_create;
 int pthread_create(pthread_t *restrict thread,
 		const pthread_attr_t *restrict attr,
 		void *(*start_routine)(void*),

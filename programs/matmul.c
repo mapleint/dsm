@@ -103,9 +103,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-
-    void *p = mmap((void*)SHMEM_BASE, PAGE_SIZE*(client_n*client_n+2*client_n+1), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    if (p == MAP_FAILED) {
+    void *start_addr = mmap((void*)SHMEM_BASE, PAGE_SIZE*(3*client_n*client_n+10), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (start_addr == MAP_FAILED) {
 	perror("mmap");
 	exit(1);
     }
@@ -113,26 +112,30 @@ int main(int argc, char* argv[]) {
     // Storing the shared memory
     for (int i = 0; i < m1; ++i) {
         for (int j = 0; j < n1; ++j) {
-            *(int*)(SHMEM_BASE + (i/arr1_size)*PAGE_SIZE + (i%arr1_size)*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
+            *(int*)(start_addr+ (i/arr1_size)*PAGE_SIZE*client_n + (i%arr1_size)*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
         }
     }
     for (int i = 0; i < m2; ++i) {
         for (int j = 0; j < n2; ++j) {
-            *(int*)(SHMEM_BASE + client_n*PAGE_SIZE + (j/arr2_size)*PAGE_SIZE + i*arr2_size*sizeof(int) + (j%arr2_size)*sizeof(int)) = arr2[i][j];
+            *(int*)(start_addr + client_n*client_n*PAGE_SIZE + (j/arr2_size)*PAGE_SIZE*client_n + i*arr2_size*sizeof(int) + (j%arr2_size)*sizeof(int)) = arr2[i][j];
         }
     }
     //printf("Written to shared memory locations\n");
 
+
+    pthread_t* threads = malloc(client_n*client_n* sizeof(pthread_t));
     for (int i = 0; i < client_n; ++i) {
         for (int j = 0; j < client_n; ++j) {
-            pthread_t thread;
-            struct spawn_args args = {arr1_size, n1, m2, arr2_size, 
-                SHMEM_BASE + i*PAGE_SIZE, SHMEM_BASE + (client_n+j)*PAGE_SIZE,
-                SHMEM_BASE + 2*client_n*PAGE_SIZE + i*client_n*PAGE_SIZE + j*PAGE_SIZE
+            struct spawn_args* args = malloc(sizeof(struct spawn_args));
+            *args = (struct spawn_args){arr1_size, n1, m2, arr2_size, 
+                start_addr + i*PAGE_SIZE*client_n, start_addr + (client_n+j)*PAGE_SIZE*client_n,
+                start_addr + 2*client_n*client_n*PAGE_SIZE + i*client_n*PAGE_SIZE + j*PAGE_SIZE
             };
-            pthread_create(&thread, NULL, spawn, &args);
-            pthread_join(thread, NULL);
+            pthread_create(&threads[i*client_n + j], NULL, spawn, args);
         }
+    }
+    for (int i = 0; i < client_n*client_n; ++i) {
+        pthread_join(threads[i], NULL);
     }
 
     int resarr[m1][n2];
@@ -143,7 +146,7 @@ int main(int argc, char* argv[]) {
             int y_shard = j/arr2_size;
             int x_pos = (i%arr1_size);
             int y_pos = (j%arr2_size);
-            resarr[i][j] = *(int*)(SHMEM_BASE + 2*client_n*PAGE_SIZE + x_shard*client_n*PAGE_SIZE + y_shard*PAGE_SIZE + x_pos*arr2_size*sizeof(int) + y_pos*sizeof(int));
+            resarr[i][j] = *(int*)(start_addr + 2*client_n*client_n*PAGE_SIZE + x_shard*client_n*PAGE_SIZE + y_shard*PAGE_SIZE + x_pos*arr2_size*sizeof(int) + y_pos*sizeof(int));
         }
     }
 

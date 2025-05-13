@@ -1,10 +1,8 @@
-#include "client.c"
+#include "client.h"
 
 #include <stdio.h>
 #include <dlfcn.h>
 #include <stdarg.h>
-#include "memory.h"
-#include <pthreads.h>
 
 // Define a function pointer type for printf
 typedef int (*printf_t)(const char *format, ...);
@@ -51,9 +49,37 @@ void* mmap( void *addr, size_t len, int prot, int flags, int fd, off_t offset) {
     return original_mmap(addr, len, PROT_NONE, flags, fd, offset);
 }
 
-
 void __attribute__((constructor)) init(void)
 {
-	printf("preload running\n");
+	printf("initializer running\n");
+	shmem_init();
+	// Initializing the signal handler
+	struct sigaction sa = {
+		.sa_sigaction = fault_handler,
+		.sa_flags = SA_SIGINFO,
+	};
+	sigaction(SIGSEGV, &sa, NULL);
+
+	s = create_un(DEFAULT_SERVER_FILE);
+	if (connects(&s)) {
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+	printf("connection successful\n");
+
+	struct pollfd fds[1] = { 0 };
+	fds[0].fd = s.fd, fds[0].events = POLLIN;
+	while (true) {
+		poll(fds, 1, -1);
+		short socket_revents = fds[0].revents;
+		if (socket_revents & POLLIN) {
+			/* server packet */
+			printf("server rpc detected\n");
+			handle_s(s.fd);
+		}
+	}
+	printf("LD client exiting\n");
+
 	exit(0);
 }
+

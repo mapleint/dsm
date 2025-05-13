@@ -9,7 +9,7 @@
 #include "config.h"
 #include "rpc.h"
 
-struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
+struct pollfd fds[NUM_CLIENTS] = { 0 };
 
 extern __thread int request_socket;
 extern int clients[NUM_CLIENTS];
@@ -42,20 +42,22 @@ int main(int argc, char *argv[])
 	fds->fd = s.fd;
 	fds->events = POLLIN;
 	int connected = 0;
-	while (true) {
-		poll(fds, connected + 1, -1);
-		if (fds->revents & POLLIN) {
-			int j = ++connected;
-			int client_fd = accepts(&s);
-			if (client_fd == -1) {
-				perror("accept");
-			}
-			printf("accepted connection %d\n", client_fd);
-			fds[j].fd = client_fd;
-			clients[j-1] = client_fd;
-			fds[j].events = POLLIN;
+	while (connected < NUM_CLIENTS) {
+		int client_fd = accepts(&s);
+		if (client_fd == -1) {
+			perror("accept");
 		}
-		for (int i = 1; i < connected + 1; i++) {
+		printf("accepted connection %d\n", client_fd);
+		int i = connected;
+		clients[i] = client_fd;
+		fds[i].fd = client_fd;
+		fds[i].events = POLLIN;
+		connected++;
+	}
+
+	while (true) {
+		poll(fds, connected, -1);
+		for (int i = 0; i < connected + 1; i++) {
 			if (!(fds[i].revents & POLLIN)) {
 				continue;
 			}

@@ -15,7 +15,7 @@ struct socket {
 	};
 };
 
-struct socket create_in(const char *idk);
+struct socket create_in(const char *ip, unsigned short port);
 struct socket create_un(const char *path);
 
 int binds(struct socket *s);
@@ -74,19 +74,8 @@ struct store_resp {
 
 
 struct run_args {
-	void (*func)(void*);
+	void *(*func)(void*);
 	size_t argslen, resplen;
-};
-
-struct matmul_args {
-    void (*func)(void*);
-    int m1;
-    int n1;
-    int m2;
-    int n2;
-    char* addr1;
-    char* addr2;
-    char* dest;
 };
 
 void ping(void* /*struct ping_args*/, void* /*struct ping_resp*/);
@@ -99,10 +88,13 @@ void store(void* /*struct store_args*/, void* /*struct store_resp*/);
 
 void sched(void* /*struct sched_args*/, void* /*struct sched_resp*/);
 void run(void* /*struct run_args*/, void* /*struct run_resp*/);
-void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/);
+void exec_main(void*, void*); // you get the idea lmao
 
 enum rpc {
 	RPC_NA,
+	RPC_resp,
+	RPC_notif,
+
 	RPC_ping,
 
 	RPC_probe_read,
@@ -111,8 +103,11 @@ enum rpc {
 	RPC_load,
 	RPC_store,
 
+	RPC_exec,
+
+	RPC_variadic,
+
 	RPC_run,
-	RPC_wait,
 	RPC_sched,
 
 	RPC_MAX,
@@ -124,8 +119,8 @@ struct rpc_inf {
 	int response_sz;
 };
 
-
-void remote_handler(int caller);
+void handle_s(int caller);
+void *async_remote_handler(void *caller_fd);
 
 #endif /* RPC_H */
 

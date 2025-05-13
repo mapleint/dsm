@@ -2,17 +2,72 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <signal.h>
+#include <assert.h>
+#include <pthread.h>
+#include <arpa/inet.h>
+       
 #include "rpc.h"
 #include "config.h"
 #include "memory.h"
-#include <signal.h>
-#include <pthread.h>
 
-int request_socket;
+__thread int request_socket;
 int clients[NUM_CLIENTS];
 
 extern struct page_entry pe_cache[NUM_ENTRIES];
+
+struct rpc_wake {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	int id;
+	bool responded;
+	void *buffer; // to hold response
+	int len; // requested amount to read from buffer
+};
+
+struct wait_queue {
+	struct rpc_wake *rec;
+	struct wait_queue *next;
+};
+
+static struct wait_queue *outstanding_rpcs;
+
+static void insert_rpc(struct rpc_wake *rec)
+{
+	struct wait_queue *link = malloc(sizeof(struct wait_queue));
+	link->rec = rec;
+	link->next = outstanding_rpcs;
+	outstanding_rpcs = link;
+}
+
+static void unlink_rpc(struct wait_queue *prev, struct wait_queue *to_remove)
+{
+	assert(to_remove && "must not be null");
+	if (!prev) {
+		outstanding_rpcs = to_remove->next;
+	} else {
+		prev->next = to_remove->next;
+	}
+}
+
+static struct rpc_wake *pop_rpc(int id)
+{
+	struct wait_queue *cur = outstanding_rpcs;
+	struct wait_queue *prev = NULL;
+	while (cur) {
+		if (id == cur->rec->id) {
+			unlink_rpc(prev, cur);
+			struct rpc_wake *rec = cur->rec;
+			free(cur);
+			return rec;
+		}
+
+		prev = cur;
+		cur = cur->next;
+	}
+	return NULL;
+
+}
 
 static socklen_t socklen(struct socket* sock) {
 	switch (sock->in.sin_family) {
@@ -30,9 +85,28 @@ static socklen_t socklen(struct socket* sock) {
 }
 
 
-struct socket create_in(const char *idk)
+struct socket create_in(const char *ip, unsigned short port)
 {
+	struct socket s = { 0 };
+	s.fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (s.fd < 0) {
+		fprintf(stderr, "in socket creation failed\n");
+		exit(1);
+	}
+	s.in.sin_family = AF_INET;
+	s.in.sin_port = htons(port);
+	if (!ip) {
+		s.in.sin_addr.s_addr = INADDR_ANY;
+	} else {
+		if (inet_pton(AF_INET, ip, &s.in.sin_addr) <= 0) {
+			perror("inet_pton");
+			exit(EXIT_FAILURE);
+		}
+	}
 
+	s.len = socklen(&s);
+
+	return s;
 }
 
 struct socket create_un(const char *path)
@@ -40,7 +114,7 @@ struct socket create_un(const char *path)
 	struct socket s = { 0 };
 	s.fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (s.fd < 0) {
-		fprintf(stderr, "socket creation failed\n");
+		fprintf(stderr, "un socket creation failed\n");
 		exit(1);
 	}
 	s.un.sun_family = AF_UNIX;
@@ -115,7 +189,7 @@ void probe_read(void* pparams, void* presult)
 {
 	struct pr_args *args = pparams;
 	struct pr_resp *result = presult;
-	// TODO lookup by addr
+	// lookup mesi state by addr
 	struct page_entry *pe = find_page(args->addr);
 	enum state st = pe ? pe->st : INVALID;
 	result->st = st;
@@ -188,7 +262,7 @@ void load(void* pparams, void* presult)
 		if (resp.st == INVALID) {
 			continue;
 		}
-		printf("pg data %s\n", &resp.page);
+		printf("pg data %s\n", (char*)&resp.page);
 		memcpy(result->page, &resp.page, sizeof(resp.page));
 		result->st = SHARED;
 	}
@@ -223,6 +297,8 @@ void store(void* pparams, void* presult)
 
 struct rpc_inf rpc_inf_table[] = {
 	[RPC_NA] = {NULL, -1, -1},
+	[RPC_resp] = {NULL, -1, -1},
+	[RPC_notif] = {NULL, sizeof(int), -1},
 	[RPC_ping] = {ping,
 	       	sizeof(struct ping_args), sizeof(struct ping_resp)},
 
@@ -242,42 +318,79 @@ struct rpc_inf rpc_inf_table[] = {
 	[RPC_sched] = {sched,
 	       	sizeof(struct run_args), 0},
 
-	[RPC_wait] = {wait,
-	       	0, 0},
+	[RPC_exec] = {exec_main,
+	       	0, sizeof(int)},
 
 };
 
 int remote(int target, int func, void *input, void *output)
 {
+	static _Atomic int rpc_nonce = 0;
 	struct rpc_inf *inf = rpc_inf_table + func;
+	rpc_nonce++;
+
+	// lock();
 	sends(target, &func, sizeof(int));
-	sends(target, input, inf->param_sz);
-	recvs(target, output, inf->response_sz);
-	return 0;
-}
-
-
-int remote_varsz(int target, int func, void *input, void *output, int inp_sz)
-{
-	struct rpc_inf *inf = rpc_inf_table + func;
-	sends(target, &func, sizeof(int));
-	sends(target, input, inf->param_sz);
-	sends(target, inf->param_sz + (char*)input, inp_sz);
-	recvs(target, output, inf->response_sz);
-	return 0;
-}
-
-
-void remote_handler(int caller)
-{
-	int func;
-	request_socket = caller;
-
-	recvs(caller, &func, sizeof(int));
-	if (func < 0 || func >= RPC_MAX) {
-		close(caller);
-		return;
+	sends(target, &rpc_nonce, sizeof(int));
+	if (func < RPC_variadic) {
+		sends(target, input, inf->param_sz);
+	} else {
+		sends(target, input, *(int*)(input) + sizeof(int));
 	}
+	// unlock();
+	
+	
+	struct rpc_wake rpc = { 0 };
+	pthread_mutex_init(&rpc.mutex, NULL);
+	pthread_mutex_lock(&rpc.mutex);
+	pthread_cond_init(&rpc.cond, NULL);
+	rpc.id = rpc_nonce;
+	rpc.len = inf->response_sz;
+	rpc.buffer = output;
+	insert_rpc(&rpc);
+
+	while (!rpc.responded) {
+		pthread_cond_wait(&rpc.cond, &rpc.mutex);
+	}
+	printf("exited conditional wait\n");
+
+	pthread_mutex_unlock(&rpc.mutex);
+	pthread_mutex_destroy(&rpc.mutex);
+	return 0;
+}
+
+
+struct remote_handler_args {
+	int fd;
+	int func;
+	int nonce;
+	void *args;
+};
+
+void *async_remote_handler(void *pargs)
+{
+	struct remote_handler_args *args = (struct remote_handler_args*)pargs;
+	int fd = args->fd;
+	int func = args->func;
+	int nonce = args->nonce;
+	void *in = args->args;
+	request_socket = fd;
+	free(pargs);
+	remote_handler(fd, func, nonce, in);
+}
+
+void run(void* p_args, void* run_resp)
+{
+	pthread_t thread;
+
+	struct run_args *args = p_args;
+	void *inst_args = malloc(args->argslen);
+
+}
+
+void remote_handler(int caller, int func, int nonce, void *args)
+{
+	printf("remote RPC no.%d\n", func);
 	struct rpc_inf *inf = rpc_inf_table + func;
 
 	void *resp = malloc(inf->response_sz);
@@ -286,18 +399,13 @@ void remote_handler(int caller)
 		exit(EXIT_FAILURE);
 		return;
 	}
-	void *args = malloc(inf->param_sz);
-	if (!args) {
-		perror("malloc");
-		exit(EXIT_FAILURE);
-		return;
-	}
-
-	recvs(caller, args, inf->param_sz);
-
 	rpc_inf_table[func].handler(args, resp);
-	free(args);
+	volatile int resp_code = RPC_resp;
+	sends(caller, &resp_code, sizeof(resp_code));
+	sends(caller, &nonce, sizeof(nonce));
 	sends(caller, resp, inf->response_sz);
+
+	free(args);
 	free(resp);
 }
 
@@ -311,24 +419,99 @@ void sched(void* p_args, void* sched_resp)
 		i = (i + 1) % NUM_CLIENTS;
 	}
 
-	remote_varsz(clients[i], RPC_run, p_args, sched_resp, args->argslen);
 
 }
 
-void run(void* p_args, void* run_resp)
+int nop() 
 {
-	pthread_t thread;
-
-	struct run_args *args = p_args;
-	void *inst_args = malloc(args->argslen);
-	recvs(request_socket, inst_args, args->argslen);
-
-	pthread_create(&thread, NULL, args->func, &inst_args);
-
+	return 0;	
 }
 
-void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/)
-{
+int (*real_main)(int, char**, char**);
+int real_argc;
+char** real_argv;
+char** real_envp;
 
+
+void exec_main(__attribute((unused)) void* vargs, void *vresp)
+{
+	if (!real_main) {
+		real_main = nop;
+	}
+	int *pexitcode = vresp;
+	*pexitcode = real_main(real_argc, real_argv, real_envp);
+	printf("raking exit %d\n", *pexitcode);
+}
+
+void handle_s(int caller)
+{
+	request_socket = caller;
+	int func = -1;
+
+	recvs(caller, &func, sizeof(int));
+	if (func < 0 || func >= RPC_MAX) {
+		fprintf(stderr, "caller %d gave invalid func=%d\n", caller, func);
+		close(caller);
+		return;
+	}
+	if (func == RPC_resp) {
+		printf("resp found\n");
+		int id = -1;
+		recvs(caller, &id, sizeof(int));
+		if (id < 0) {
+			fprintf(stderr, "caller %d gave invalid responseid=%d\n", caller, id);
+			close(caller);
+			return;
+		}
+		struct rpc_wake *rpc = pop_rpc(id);
+		if (!rpc) {
+			fprintf(stderr, "caller %d gave invalid func=%d\n", caller, func);
+			close(caller);
+			return;
+		}
+		recvs(caller, rpc->buffer, rpc->len);
+		rpc->responded = true;
+		pthread_cond_signal(&rpc->cond); //TODO handle read
+		return;
+	} 
+	else if (func == RPC_notif) {
+		// TODO handle async(?)
+		return;
+	}
+	// otherwise its a request
+	struct rpc_inf *inf = rpc_inf_table + func;
+	printf("remote message was an RPC with no %d\n", func);
+	int nonce = -1;
+	recvs(caller, &nonce, sizeof(nonce));
+	int len = inf->param_sz;
+	void *args; 
+	if (func < RPC_variadic) {
+		args = malloc(inf->param_sz);
+	} else {
+		recvs(caller, &len, sizeof(int));
+		args = malloc(len);
+		if (args) *(int*)args = len;
+	}
+
+	if (!args) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+		return;
+	}
+	recvs(caller, args, len);
+	pthread_t worker;
+	struct remote_handler_args *in = malloc(sizeof(struct remote_handler_args));
+	if (!in) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+		return;
+	}
+	in->fd = caller;
+	in->func = func;
+	in->nonce = nonce;
+	in->args = args;
+
+	pthread_create(&worker, NULL, async_remote_handler, in);
+	pthread_detach(worker);
 }
 

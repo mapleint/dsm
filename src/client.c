@@ -95,7 +95,7 @@ void fault_handler(int sig, siginfo_t *info, void *ucontext)
 }
 
 
-int main(int argc, char *argv[])
+int main()
 {
 	shmem_init();
 	// Initializing the signal handler
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 			switch (buf[0]) {
 			case 'w':
 				printf("writing\n");
-				strcpy(global, buf);
+				strcpy(global, buf + 1);
 				printf("wrote\n");
 				break;
 			case 'r':

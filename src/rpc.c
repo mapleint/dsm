@@ -422,11 +422,25 @@ void sched(void* p_args, void* sched_resp)
 
 }
 
+int nop() 
+{
+	return 0;	
+}
+
+int (*real_main)(int, char**, char**);
+int real_argc;
+char** real_argv;
+char** real_envp;
+
+
 void exec_main(__attribute((unused)) void* vargs, void *vresp)
 {
+	if (!real_main) {
+		real_main = nop;
+	}
 	int *pexitcode = vresp;
-	*pexitcode = 0;
-	printf("raking exit 0\n");
+	*pexitcode = real_main(real_argc, real_argv, real_envp);
+	printf("raking exit %d\n", *pexitcode);
 }
 
 void handle_s(int caller)

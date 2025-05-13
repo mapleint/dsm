@@ -9,6 +9,51 @@ typedef int (*printf_t)(const char *format, ...);
 
 static printf_t original_printf = NULL;
 
+extern int (*real_main)(int, char**, char**);
+extern int real_argc;
+extern char **real_argv;
+extern char **real_envp;
+
+int listen_loop(int argc, char **argv, char **envp)
+{
+	real_argv = argv;
+	real_envp = envp;
+	printf("listen loop entered\n");
+	struct pollfd fds[1] = { 0 };
+	fds[0].fd = s.fd, fds[0].events = POLLIN;
+	while (true) {
+		poll(fds, 1, -1);
+		short socket_revents = fds[0].revents;
+		if (socket_revents & POLLIN) {
+			/* server packet */
+			printf("server rpc detected\n");
+			handle_s(s.fd);
+		}
+	}
+	return 0;
+
+}
+
+// hook __libc_start_main
+int __libc_start_main(
+    int (*main)(int, char **, char **),
+    int argc,
+    char **ubp_av,
+    void (*init)(void),
+    void (*fini)(void),
+    void (*rtld_fini)(void),
+    void *stack_end
+) {
+	real_main = main;
+
+	// Resolve real __libc_start_main
+	typeof(&__libc_start_main) orig_libc_start_main;
+	orig_libc_start_main = dlsym(RTLD_NEXT, "__libc_start_main");
+
+	// Call it with our fake main
+	return orig_libc_start_main(listen_loop, argc, ubp_av, init, fini, rtld_fini, stack_end);
+}
+
 // Custom printf implementation
 int printf(const char *format, ...) {
     // Initialize original_printf if it's NULL
@@ -65,21 +110,6 @@ void __attribute__((constructor)) init(void)
 		perror("connect");
 		exit(EXIT_FAILURE);
 	}
-	printf("connection successful\n");
-
-	struct pollfd fds[1] = { 0 };
-	fds[0].fd = s.fd, fds[0].events = POLLIN;
-	while (true) {
-		poll(fds, 1, -1);
-		short socket_revents = fds[0].revents;
-		if (socket_revents & POLLIN) {
-			/* server packet */
-			printf("server rpc detected\n");
-			handle_s(s.fd);
-		}
-	}
-	printf("LD client exiting\n");
-
-	exit(0);
+	printf("connection successful: entering libc\n");
 }
 

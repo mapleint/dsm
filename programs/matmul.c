@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include <assert.h>
 #include <string.h>
 #include <pthread.h>
@@ -44,6 +45,8 @@ void *spawn(void* func_args) {
             res_arr[i][j] = 0;
             for (int k = 0; k < n1; ++k) {
                 res_arr[i][j] += arr1[i*n1 + k]*arr2[k*n2 + j];
+                //printf("arr1[%d][%d] = %d\n", i, k, arr1[i*n1 + k]);
+                //printf("arr2[%d][%d] = %d\n", k, j, arr2[k*n2 + j]);
             }
         }
     }
@@ -58,108 +61,123 @@ void *spawn(void* func_args) {
     return NULL;
 }
 
-#define SHMEM_00 SHMEM_BASE + PAGE_SIZE
-#define SHMEM_01 SHMEM_BASE + 2*PAGE_SIZE
-#define SHMEM_10 SHMEM_BASE + 3*PAGE_SIZE
-#define SHMEM_11 SHMEM_BASE + 4*PAGE_SIZE
+int main(int argc, char* argv[]) {
 
-#define dest_00 SHMEM_BASE + 5*PAGE_SIZE
-#define dest_01 SHMEM_BASE + 6*PAGE_SIZE
-#define dest_10 SHMEM_BASE + 7*PAGE_SIZE
-#define dest_11 SHMEM_BASE + 8*PAGE_SIZE
+    assert(argc = 4);
+    int mat_n = atoi(argv[1]);
+    int client_n = atoi(argv[2]);
+    int max_num = atoi(argv[3]);
+    srand(time(NULL));
+    clock_t start, end;
+    start = clock();
 
-int m1 = 4;
-int n1 = 4;
-int m2 = 4;
-int n2 = 4;
+    int m1 = mat_n;
+    int n1 = mat_n;
+    int m2 = mat_n;
+    int n2 = mat_n;
 
-int arr1[4][4] = {
-    {4, 3, 2, 1},
-    {1, 2, 6, 4},
-    {5, 0, 1, 9},
-    {3, 8, 20, 4},
-};
+    //printf("Matrix 1: %d x %d\n", m1, n1);
+    //printf("Matrix 2: %d x %d\n", m2, n2);
 
-int arr2[4][4] = {
-    {8, 1, 3, 9},
-    {5, 4, 5, 6}, 
-    {1, 1, 9, 3},
-    {4, 4, 7, 2},
-};
+    int arr1_size = m1/client_n;
+    int arr2_size = n2/client_n;
 
-int main() {
-    void *p = mmap((void*)SHMEM_BASE, PAGE_SIZE*32, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    // Getting random arrays
+    int** arr1 = (int**)malloc(m1 * sizeof(int*));
+    int** arr2 = (int**)malloc(m2 * sizeof(int*));
+    for (int i = 0; i < m1; i++) {
+        arr1[i] = (int*)malloc(n1 * sizeof(int));
+    }
+    for (int i = 0; i < m2; ++i) {
+        arr2[i] = (int*)malloc(n2 * sizeof(int));
+    }
+
+    for (int i = 0; i < m1; ++i) {
+        for (int j = 0; j < n1; ++j) {
+            arr1[i][j] = rand()%max_num;
+        }
+    }
+    for (int i = 0; i < m2; ++i) {
+        for (int j = 0; j < n2; ++j) {
+            arr2[i][j] = rand()%max_num;
+        }
+    }
+
+
+    void *p = mmap((void*)SHMEM_BASE, PAGE_SIZE*(client_n*client_n+2*client_n+1), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
     if (p == MAP_FAILED) {
 	perror("mmap");
 	exit(1);
     }
-    //printf("%p\n", p);
-    //printf("SHMEM_00: %p\n", SHMEM_00);
-    //printf("SHMEM_01: %p\n", SHMEM_01);
-    //printf("SHMEM_10: %p\n", SHMEM_10);
-    //printf("SHMEM_11: %p\n", SHMEM_11);
+   
     // Storing the shared memory
-    for (int i = 0; i < m1/2; ++i) {
+    for (int i = 0; i < m1; ++i) {
         for (int j = 0; j < n1; ++j) {
-            *(int*)(SHMEM_00 + i*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
-        }
-    }
-    for (int i = m1/2; i < m1; ++i) {
-        for (int j = 0; j < n1; ++j) {
-            *(int*)(SHMEM_01 + (i-m1/2)*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
+            *(int*)(SHMEM_BASE + (i/arr1_size)*PAGE_SIZE + (i%arr1_size)*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
         }
     }
     for (int i = 0; i < m2; ++i) {
-        for (int j = 0; j < n2/2; ++j) {
-            *(int*)(SHMEM_10 + i*n2/2*sizeof(int) + j*sizeof(int)) = arr2[i][j];
-        }
-        for (int j = n2/2; j < n2; ++j) {
-            *(int*)(SHMEM_11 + i*n2/2*sizeof(int) + (j-n2/2)*sizeof(int)) = arr2[i][j];
+        for (int j = 0; j < n2; ++j) {
+            *(int*)(SHMEM_BASE + client_n*PAGE_SIZE + (j/arr2_size)*PAGE_SIZE + i*arr2_size*sizeof(int) + (j%arr2_size)*sizeof(int)) = arr2[i][j];
         }
     }
-
     //printf("Written to shared memory locations\n");
 
-
-    pthread_t thread_00; 
-    pthread_t thread_01; 
-    pthread_t thread_10; 
-    pthread_t thread_11; 
-    
-    struct spawn_args args_00 = {m1/2, n1, m2, n2/2, SHMEM_00, SHMEM_10, dest_00};
-    pthread_create(&thread_00, NULL, spawn, &args_00);
-    struct spawn_args args_01 = {m1/2, n1, m2, n2/2, SHMEM_00, SHMEM_11, dest_01};
-    pthread_create(&thread_01, NULL, spawn, &args_01);
-    struct spawn_args args_10 = {m1/2, n1, m2, n2/2, SHMEM_01, SHMEM_10, dest_10};
-    pthread_create(&thread_10, NULL, spawn, &args_10);
-    struct spawn_args args_11 = {m1/2, n1, m2, n2/2, SHMEM_01, SHMEM_11, dest_11};
-    pthread_create(&thread_11, NULL, spawn, &args_11);
-
-    pthread_join(thread_00, NULL);
-    pthread_join(thread_01, NULL);
-    pthread_join(thread_10, NULL);
-    pthread_join(thread_11, NULL);
-
-    int resarr[m1][n2];
-    for (int i = 0; i < m1; ++i) {
-        for (int j = 0; j < n2; ++j) {
-            if (i < m1/2 && j < n2/2) 
-                resarr[i][j] = *(int*)(dest_00 + i*n2/2 * sizeof(int) + j*sizeof(int));
-            if (i < m1/2 && j >= n2/2)
-                resarr[i][j] = *(int*)(dest_01 + (i)*sizeof(int)*n2/2 + (j - n2/2)*sizeof(int));
-            if (i >= m1/2 && j < n2/2)
-                resarr[i][j] = *(int*)(dest_10 + (i - m1/2)*sizeof(int)*n2/2 + j*sizeof(int));
-            if (i >= m1/2 && j >= n2/2)
-                resarr[i][j] = *(int*)(dest_11 + (i-m1/2)*sizeof(int)*n2/2 + (j-n2/2)*sizeof(int));
+    for (int i = 0; i < client_n; ++i) {
+        for (int j = 0; j < client_n; ++j) {
+            pthread_t thread;
+            struct spawn_args args = {arr1_size, n1, m2, arr2_size, 
+                SHMEM_BASE + i*PAGE_SIZE, SHMEM_BASE + (client_n+j)*PAGE_SIZE,
+                SHMEM_BASE + 2*client_n*PAGE_SIZE + i*client_n*PAGE_SIZE + j*PAGE_SIZE
+            };
+            pthread_create(&thread, NULL, spawn, &args);
+            pthread_join(thread, NULL);
         }
     }
 
+    int resarr[m1][n2];
+
+    for (int i = 0; i < m1; ++i) {
+        for (int j = 0; j < n2; ++j) {
+            int x_shard = i/arr1_size;
+            int y_shard = j/arr2_size;
+            int x_pos = (i%arr1_size);
+            int y_pos = (j%arr2_size);
+            resarr[i][j] = *(int*)(SHMEM_BASE + 2*client_n*PAGE_SIZE + x_shard*client_n*PAGE_SIZE + y_shard*PAGE_SIZE + x_pos*arr2_size*sizeof(int) + y_pos*sizeof(int));
+        }
+    }
+
+    /*
+    printf("Arr 1:\n");
+    for (int i = 0; i < m1; i++) {
+        for (int j = 0; j < n1; j++) {
+            printf("%d ", arr1[i][j]);
+        }
+        printf("\n");
+    }
+    printf("Arr 2:\n");
+    for (int i = 0; i < m2; i++) {
+        for (int j = 0; j < n2; j++) {
+            printf("%d ", arr2[i][j]);
+        }
+        printf("\n");
+    }
+
+    printf("Result:\n");
     for (int i = 0; i < m1; i++) {
         for (int j = 0; j < n2; j++) {
             printf("%d ", resarr[i][j]);
         }
         printf("\n");
     }
-
+    */
+    
+    end = clock();
+    double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
+    char filename[100];
+    sprintf(filename,  "../experiments/matmul/%d_%d_%d.txt", mat_n, client_n, max_num);
+    FILE * fptr = fopen(filename, "w");
+    fprintf(fptr, "%f\n", time_spent);
+    fclose(fptr);
 }
 

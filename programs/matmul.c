@@ -86,8 +86,12 @@ int arr2[4][4] = {
 };
 
 int main() {
-    mmap((void*)SHMEM_00, PAGE_SIZE*8, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-
+    void *p = mmap((void*)SHMEM_BASE, PAGE_SIZE*32, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (p == MAP_FAILED) {
+	perror("mmap");
+	exit(1);
+    }
+    printf("%p\n", p);
     // Storing the shared memory
     for (int i = 0; i < m1; ++i) {
         for (int j = 0; j < n1/2; ++j) {

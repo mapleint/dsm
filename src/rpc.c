@@ -2,17 +2,82 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <assert.h>
+#include <pthread.h>
 
 #include "rpc.h"
 #include "config.h"
 #include "memory.h"
-#include <signal.h>
-#include <pthread.h>
 
 int request_socket;
 int clients[NUM_CLIENTS];
 
 extern struct page_entry pe_cache[NUM_ENTRIES];
+
+struct rpc_wake {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	int id;
+	bool responded;
+};
+
+struct wait_queue {
+	struct rpc_wake *rec;
+	struct wait_queue *next;
+};
+
+static struct wait_queue *outstanding_rpcs;
+
+static void insert_rpc(struct rpc_wake *rec)
+{
+	struct wait_queue *link = malloc(sizeof(struct wait_queue));
+	link->rec = rec;
+	link->next = outstanding_rpcs;
+	outstanding_rpcs = link;
+}
+
+static struct wait_queue *lookup_rpc(int id)
+{
+	struct wait_queue *cur = outstanding_rpcs;
+	while (cur) {
+		if (id == cur->rec->id) {
+			return cur;
+		}
+		cur = cur->next;
+	}
+	return NULL;
+
+}
+
+static void unlink_rpc(struct wait_queue *prev, struct wait_queue *to_remove)
+{
+	assert(to_remove && "must not be null");
+	if (!prev) {
+		outstanding_rpcs = to_remove->next;
+	} else {
+		prev->next = to_remove->next;
+	}
+}
+
+static struct rpc_wake *pop_rpc(int id)
+{
+	struct wait_queue *cur = outstanding_rpcs;
+	struct wait_queue *prev = NULL;
+	while (cur) {
+		if (id == cur->rec->id) {
+			unlink_rpc(prev, cur);
+			struct rpc_wake *rec = cur->rec;
+			free(cur);
+			return rec;
+		}
+
+		prev = cur;
+		cur = cur->next;
+	}
+	return NULL;
+
+}
 
 static socklen_t socklen(struct socket* sock) {
 	switch (sock->in.sin_family) {
@@ -223,6 +288,8 @@ void store(void* pparams, void* presult)
 
 struct rpc_inf rpc_inf_table[] = {
 	[RPC_NA] = {NULL, -1, -1},
+	[RPC_resp] = {NULL, -1, -1},
+	[RPC_notif] = {NULL, sizeof(int), -1},
 	[RPC_ping] = {ping,
 	       	sizeof(struct ping_args), sizeof(struct ping_resp)},
 
@@ -249,9 +316,28 @@ struct rpc_inf rpc_inf_table[] = {
 
 int remote(int target, int func, void *input, void *output)
 {
+	static _Atomic int rpc_nonce = 0;
 	struct rpc_inf *inf = rpc_inf_table + func;
+	// lock();
 	sends(target, &func, sizeof(int));
 	sends(target, input, inf->param_sz);
+	// unlock();
+	
+	
+	struct rpc_wake rpc = { 0 };
+	pthread_mutex_init(&rpc.mutex, NULL);
+	pthread_mutex_lock(&rpc.mutex);
+	pthread_cond_init(&rpc.cond, NULL);
+	rpc_nonce++;
+	rpc.id = rpc_nonce;
+	insert_rpc(&rpc);
+
+	while (!rpc.responded) {
+		pthread_cond_wait(&rpc.cond, &rpc.mutex);
+	}
+
+	pthread_mutex_unlock(&rpc.mutex);
+	pthread_mutex_destroy(&rpc.mutex);
 	recvs(target, output, inf->response_sz);
 	return 0;
 }
@@ -267,17 +353,31 @@ int remote_varsz(int target, int func, void *input, void *output, int inp_sz)
 	return 0;
 }
 
-
 void remote_handler(int caller)
 {
-	int func;
+	int func = -1;
 	request_socket = caller;
 
 	recvs(caller, &func, sizeof(int));
 	if (func < 0 || func >= RPC_MAX) {
+		fprintf(stderr, "caller %d gave invalid func=%d\n", func);
 		close(caller);
 		return;
 	}
+	if (func == RPC_resp) {
+		int id = -1;
+		recvs(caller, &func, sizeof(int));
+		// TODO  unblock waiting thread
+		// mutex = lookup();
+
+		return;
+	} 
+	else if (func == RPC_notif) {
+		// TODO handle async(?)
+		return;
+	}
+	// otherwise its a request
+
 	struct rpc_inf *inf = rpc_inf_table + func;
 
 	void *resp = malloc(inf->response_sz);

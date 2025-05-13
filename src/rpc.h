@@ -103,6 +103,9 @@ void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/);
 
 enum rpc {
 	RPC_NA,
+	RPC_resp,
+	RPC_notif,
+
 	RPC_ping,
 
 	RPC_probe_read,

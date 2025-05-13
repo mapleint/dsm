@@ -17,7 +17,8 @@ struct page_entry {
 
 #define PAGE_SIZE 4096
 
-#define SHMEM_BASE ((void*)0x69696969000LL)
+#define SHMEM_BASE ((void*)0x440000000UL)
+//0x69696969000UL)
 #define SHMEM_LEN  PAGE_SIZE * 256
 
 static inline void r_prot(void *page)
@@ -51,7 +52,7 @@ static inline void *page_align(void *addr)
 static void shmem_init()
 {
 	shmem = mmap(SHMEM_BASE, SHMEM_LEN, PROT_NONE, 
-		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
 	if (shmem == MAP_FAILED) {
 		perror("mmap failed");

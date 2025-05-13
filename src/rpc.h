@@ -15,7 +15,7 @@ struct socket {
 	};
 };
 
-struct socket create_in(const char *idk);
+struct socket create_in(const char *ip, unsigned short port);
 struct socket create_un(const char *path);
 
 int binds(struct socket *s);
@@ -74,7 +74,7 @@ struct store_resp {
 
 
 struct run_args {
-	void (*func)(void*);
+	void *(*func)(void*);
 	size_t argslen, resplen;
 };
 

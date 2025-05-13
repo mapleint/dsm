@@ -5,7 +5,8 @@
 #include <signal.h>
 #include <assert.h>
 #include <pthread.h>
-
+#include <arpa/inet.h>
+       
 #include "rpc.h"
 #include "config.h"
 #include "memory.h"
@@ -35,19 +36,6 @@ static void insert_rpc(struct rpc_wake *rec)
 	link->rec = rec;
 	link->next = outstanding_rpcs;
 	outstanding_rpcs = link;
-}
-
-static struct wait_queue *lookup_rpc(int id)
-{
-	struct wait_queue *cur = outstanding_rpcs;
-	while (cur) {
-		if (id == cur->rec->id) {
-			return cur;
-		}
-		cur = cur->next;
-	}
-	return NULL;
-
 }
 
 static void unlink_rpc(struct wait_queue *prev, struct wait_queue *to_remove)
@@ -95,9 +83,28 @@ static socklen_t socklen(struct socket* sock) {
 }
 
 
-struct socket create_in(const char *idk)
+struct socket create_in(const char *ip, unsigned short port)
 {
+	struct socket s = { 0 };
+	s.fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (s.fd < 0) {
+		fprintf(stderr, "in socket creation failed\n");
+		exit(1);
+	}
+	s.in.sin_family = AF_INET;
+	s.in.sin_port = htons(port);
+	if (!ip) {
+		s.in.sin_addr.s_addr = INADDR_ANY;
+	} else {
+		if (inet_pton(AF_INET, ip, &s.in.sin_addr) <= 0) {
+			perror("inet_pton");
+			exit(EXIT_FAILURE);
+		}
+	}
 
+	s.len = socklen(&s);
+
+	return s;
 }
 
 struct socket create_un(const char *path)
@@ -105,7 +112,7 @@ struct socket create_un(const char *path)
 	struct socket s = { 0 };
 	s.fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (s.fd < 0) {
-		fprintf(stderr, "socket creation failed\n");
+		fprintf(stderr, "un socket creation failed\n");
 		exit(1);
 	}
 	s.un.sun_family = AF_UNIX;
@@ -180,7 +187,7 @@ void probe_read(void* pparams, void* presult)
 {
 	struct pr_args *args = pparams;
 	struct pr_resp *result = presult;
-	// TODO lookup by addr
+	// lookup mesi state by addr
 	struct page_entry *pe = find_page(args->addr);
 	enum state st = pe ? pe->st : INVALID;
 	result->st = st;
@@ -253,7 +260,7 @@ void load(void* pparams, void* presult)
 		if (resp.st == INVALID) {
 			continue;
 		}
-		printf("pg data %s\n", &resp.page);
+		printf("pg data %s\n", (char*)&resp.page);
 		memcpy(result->page, &resp.page, sizeof(resp.page));
 		result->st = SHARED;
 	}
@@ -360,16 +367,19 @@ void remote_handler(int caller)
 
 	recvs(caller, &func, sizeof(int));
 	if (func < 0 || func >= RPC_MAX) {
-		fprintf(stderr, "caller %d gave invalid func=%d\n", func);
+		fprintf(stderr, "caller %d gave invalid func=%d\n", caller, func);
 		close(caller);
 		return;
 	}
 	if (func == RPC_resp) {
 		int id = -1;
-		recvs(caller, &func, sizeof(int));
-		// TODO  unblock waiting thread
-		// mutex = lookup();
-
+		recvs(caller, &id, sizeof(int));
+		if (id < 0) {
+			fprintf(stderr, "caller %d gave invalid responseid=%d\n", caller, id);
+		}
+		struct rpc_wake *rpc = pop_rpc(id);
+		rpc->responded = true;
+		pthread_cond_signal(&rpc->cond);
 		return;
 	} 
 	else if (func == RPC_notif) {

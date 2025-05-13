@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <poll.h>
+#include <stdlib.h>
 
 #include "config.h"
 #include "rpc.h"
@@ -18,11 +19,15 @@ int main(int argc, char *argv[])
 		clients[i] = -1;
 	}
 
+	struct socket s; 
 	if (argc < 2) {
 		printf("defaulting to UNIX\n");
 		unlink(DEFAULT_SERVER_FILE);
+		s = create_un(DEFAULT_SERVER_FILE);
+	} else {
+		s = create_in(NULL, atoi(argv[1]));
 	}
-	struct socket s = create_un(DEFAULT_SERVER_FILE);
+
 	printf("socket created\n");
 	if (binds(&s)) {
 		perror("bind");

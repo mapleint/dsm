@@ -128,7 +128,8 @@ struct rpc_inf {
 };
 
 
-void remote_handler(int caller);
+void handle_s(int caller);
+void *async_remote_handler(void *caller_fd);
 
 #endif /* RPC_H */
 

@@ -11,6 +11,7 @@
 #include <string.h> 
 #include <assert.h>
 #include <poll.h>
+#include <pthread.h>
 
 #include "config.h"
 #include "rpc.h"
@@ -94,6 +95,36 @@ void fault_handler(int sig, siginfo_t *info, void *ucontext)
 	}
 }
 
+void *userin(void *args)
+{
+	while (true) {
+		char buf[25] = { 0 };
+		fgets(buf, sizeof(buf), stdin);
+		char *global = (char*)shmem;
+		switch (buf[0]) {
+		case 'w':
+			printf("writing\n");
+			strcpy(global, buf + 1);
+			printf("wrote\n");
+			break;
+		case 'r':
+			printf("reading global\n");
+			strcpy(buf, global);
+			printf("read %s\n", buf);
+			break;
+		case 'p':
+			cping(s.fd);
+			break;
+		case 'q':
+			printf("client exiting");
+			exit(0);
+		default:
+			printf("bad command :(\n");
+			break;
+		}
+	}
+	return NULL;
+}
 
 int main()
 {
@@ -112,46 +143,19 @@ int main()
 	}
 	printf("connection successful\n");
 
-	struct pollfd fds[2] = { 0 };
-
+	struct pollfd fds[1] = { 0 };
 	fds[0].fd = s.fd, fds[0].events = POLLIN;
-	fds[1].fd = 0, fds[1].events = POLLIN;
+	pthread_t thread;
+	pthread_create(&thread, NULL, userin, NULL);
 	while (true) {
-		char buf[25] = { 0 };
-		poll(fds, 2, -1);
+		poll(fds, 1, -1);
 		short socket_revents = fds[0].revents;
 		if (socket_revents & POLLIN) {
-			/* SERVER TOLD US SOMETHING UNPROMPTED? */
+			/* server packet */
 			printf("server rpc detected\n");
-			remote_handler(s.fd);
-		}
-		short stdin_revents = fds[1].revents;
-		if (stdin_revents & POLLIN) {
-			fgets(buf, sizeof(buf), stdin);
-			char *global = (char*)shmem;
-			switch (buf[0]) {
-			case 'w':
-				printf("writing\n");
-				strcpy(global, buf + 1);
-				printf("wrote\n");
-				break;
-			case 'r':
-				printf("reading global\n");
-				strcpy(buf, global);
-				printf("read %s\n", buf);
-				break;
-			case 'p':
-				cping(s.fd);
-				break;
-			case 'q':
-				exit(0);
-			default:
-				printf("bad command :(\n");
-				break;
-			}
+			handle_s(s.fd);
 		}
 	}
-
 	printf("client exiting\n");
 	close(s.fd);
 }

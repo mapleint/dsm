@@ -11,7 +11,7 @@
 #include "config.h"
 #include "memory.h"
 
-int request_socket;
+__thread int request_socket;
 int clients[NUM_CLIENTS];
 
 extern struct page_entry pe_cache[NUM_ENTRIES];
@@ -21,6 +21,8 @@ struct rpc_wake {
 	pthread_cond_t cond;
 	int id;
 	bool responded;
+	void *buffer; // to hold response
+	int len; // requested amount to read from buffer
 };
 
 struct wait_queue {
@@ -325,8 +327,11 @@ int remote(int target, int func, void *input, void *output)
 {
 	static _Atomic int rpc_nonce = 0;
 	struct rpc_inf *inf = rpc_inf_table + func;
+	rpc_nonce++;
+
 	// lock();
 	sends(target, &func, sizeof(int));
+	sends(target, &rpc_nonce, sizeof(int));
 	sends(target, input, inf->param_sz);
 	// unlock();
 	
@@ -335,17 +340,18 @@ int remote(int target, int func, void *input, void *output)
 	pthread_mutex_init(&rpc.mutex, NULL);
 	pthread_mutex_lock(&rpc.mutex);
 	pthread_cond_init(&rpc.cond, NULL);
-	rpc_nonce++;
 	rpc.id = rpc_nonce;
+	rpc.len = inf->response_sz;
+	rpc.buffer = output;
 	insert_rpc(&rpc);
 
 	while (!rpc.responded) {
 		pthread_cond_wait(&rpc.cond, &rpc.mutex);
 	}
+	printf("exited conditional wait\n");
 
 	pthread_mutex_unlock(&rpc.mutex);
 	pthread_mutex_destroy(&rpc.mutex);
-	recvs(target, output, inf->response_sz);
 	return 0;
 }
 
@@ -360,34 +366,40 @@ int remote_varsz(int target, int func, void *input, void *output, int inp_sz)
 	return 0;
 }
 
-void remote_handler(int caller)
+struct remote_handler_args {
+	int fd;
+	int func;
+	int nonce;
+	void *args;
+};
+
+void *async_remote_handler(void *pargs)
 {
-	int func = -1;
-	request_socket = caller;
+	struct remote_handler_args *args = (struct remote_handler_args*)pargs;
+	int fd = args->fd;
+	int func = args->func;
+	int nonce = args->nonce;
+	void *in = args->args;
+	request_socket = fd;
+	free(pargs);
+	remote_handler(fd, func, nonce, in);
+}
 
-	recvs(caller, &func, sizeof(int));
-	if (func < 0 || func >= RPC_MAX) {
-		fprintf(stderr, "caller %d gave invalid func=%d\n", caller, func);
-		close(caller);
-		return;
-	}
-	if (func == RPC_resp) {
-		int id = -1;
-		recvs(caller, &id, sizeof(int));
-		if (id < 0) {
-			fprintf(stderr, "caller %d gave invalid responseid=%d\n", caller, id);
-		}
-		struct rpc_wake *rpc = pop_rpc(id);
-		rpc->responded = true;
-		pthread_cond_signal(&rpc->cond);
-		return;
-	} 
-	else if (func == RPC_notif) {
-		// TODO handle async(?)
-		return;
-	}
-	// otherwise its a request
+void run(void* p_args, void* run_resp)
+{
+	pthread_t thread;
 
+	struct run_args *args = p_args;
+	void *inst_args = malloc(args->argslen);
+	recvs(request_socket, inst_args, args->argslen);
+
+	pthread_create(&thread, NULL, args->func, &inst_args);
+
+}
+
+void remote_handler(int caller, int func, int nonce, void *args)
+{
+	printf("remote RPC no.%d\n", func);
 	struct rpc_inf *inf = rpc_inf_table + func;
 
 	void *resp = malloc(inf->response_sz);
@@ -396,18 +408,13 @@ void remote_handler(int caller)
 		exit(EXIT_FAILURE);
 		return;
 	}
-	void *args = malloc(inf->param_sz);
-	if (!args) {
-		perror("malloc");
-		exit(EXIT_FAILURE);
-		return;
-	}
-
-	recvs(caller, args, inf->param_sz);
-
 	rpc_inf_table[func].handler(args, resp);
-	free(args);
+	volatile int resp_code = RPC_resp;
+	sends(caller, &resp_code, sizeof(resp_code));
+	sends(caller, &nonce, sizeof(nonce));
 	sends(caller, resp, inf->response_sz);
+
+	free(args);
 	free(resp);
 }
 
@@ -425,20 +432,72 @@ void sched(void* p_args, void* sched_resp)
 
 }
 
-void run(void* p_args, void* run_resp)
-{
-	pthread_t thread;
-
-	struct run_args *args = p_args;
-	void *inst_args = malloc(args->argslen);
-	recvs(request_socket, inst_args, args->argslen);
-
-	pthread_create(&thread, NULL, args->func, &inst_args);
-
-}
-
 void wait(void* /*struct wait_args*/, void* /*struct wait_resp*/)
 {
 
+}
+
+void handle_s(int caller)
+{
+	request_socket = caller;
+	int func = -1;
+
+	recvs(caller, &func, sizeof(int));
+	if (func < 0 || func >= RPC_MAX) {
+		fprintf(stderr, "caller %d gave invalid func=%d\n", caller, func);
+		close(caller);
+		return;
+	}
+	if (func == RPC_resp) {
+		printf("resp found\n");
+		int id = -1;
+		recvs(caller, &id, sizeof(int));
+		if (id < 0) {
+			fprintf(stderr, "caller %d gave invalid responseid=%d\n", caller, id);
+			close(caller);
+			return;
+		}
+		struct rpc_wake *rpc = pop_rpc(id);
+		if (!rpc) {
+			fprintf(stderr, "caller %d gave invalid func=%d\n", caller, func);
+			close(caller);
+			return;
+		}
+		recvs(caller, rpc->buffer, rpc->len);
+		rpc->responded = true;
+		pthread_cond_signal(&rpc->cond); //TODO handle read
+		return;
+	} 
+	else if (func == RPC_notif) {
+		// TODO handle async(?)
+		return;
+	}
+	// otherwise its a request
+	struct rpc_inf *inf = rpc_inf_table + func;
+	printf("remote message was an RPC with no %d\n", func);
+
+	void *args = malloc(inf->param_sz);
+	if (!args) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+		return;
+	}
+	int nonce = -1;
+	recvs(caller, &nonce, sizeof(nonce));
+	recvs(caller, args, inf->param_sz);
+	pthread_t worker;
+	struct remote_handler_args *in = malloc(sizeof(struct remote_handler_args));
+	if (!in) {
+		perror("malloc");
+		exit(EXIT_FAILURE);
+		return;
+	}
+	in->fd = caller;
+	in->func = func;
+	in->nonce = nonce;
+	in->args = args;
+
+	pthread_create(&worker, NULL, async_remote_handler, in);
+	pthread_detach(worker);
 }
 

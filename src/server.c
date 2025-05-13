@@ -4,13 +4,14 @@
 #include <stdio.h>
 #include <poll.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "config.h"
 #include "rpc.h"
 
 struct pollfd fds[NUM_CLIENTS + 1] = { 0 };
 
-extern int request_socket;
+extern __thread int request_socket;
 extern int clients[NUM_CLIENTS];
 
 int main(int argc, char *argv[])
@@ -61,8 +62,10 @@ int main(int argc, char *argv[])
 			request_socket = fds[i].fd;
 			// TODO: remove client on POLLHUP
 			printf("handling rpc from server %d\n", fds[i].fd);
-			remote_handler(fds[i].fd);
+			handle_s(fds[i].fd);
 		}
+		sleep(1);
 	}
 	return 0;
 }
+

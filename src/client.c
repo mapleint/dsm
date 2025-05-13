@@ -51,7 +51,7 @@ int main()
 	struct pollfd fds[1] = { 0 };
 	fds[0].fd = s.fd, fds[0].events = POLLIN;
 	pthread_t thread;
-	original_pthread_create(&thread, NULL, userin, NULL);
+	pthread_create(&thread, NULL, userin, NULL);
 	while (true) {
 		poll(fds, 1, -1);
 		short socket_revents = fds[0].revents;

@@ -53,15 +53,17 @@ int pthread_create(pthread_t *restrict thread,
 		void *restrict arg)
 {
 	printf("bro really tried threading in the big 2025\n");
-	if (!original_pthread_create) {
+	static bool set = 0;
+	if (!set) {
 		original_pthread_create = (pthread_create_t)dlsym(RTLD_NEXT, "pthread_create");
 		if (!original_pthread_create) {
 			fprintf(stderr, "Error: Could not find original pthread_create function.\n");
 			return -1;
 		}
 	}
+
 	return original_pthread_create(thread, attr, start_routine, arg);
-}
+	}
 
 // hook __libc_start_main
 int __libc_start_main(

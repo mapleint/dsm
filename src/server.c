@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 	getchar();
 	printf("executing server\n");
 	pthread_t master;
-	original_pthread_create(&master, NULL, run_main, NULL);
+	pthread_create(&master, NULL, run_main, NULL);
 	
 	while (true) {
 		poll(fds, NUM_CLIENTS, -1);

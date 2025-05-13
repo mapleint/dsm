@@ -30,8 +30,8 @@ void *spawn(void* func_args) {
     
     
     //Getting arrays from addresses
-    int **arr1 = (int**)addr1;
-    int **arr2 = (int**)addr2;
+    int *arr1 = (int*)addr1;
+    int *arr2 = (int*)addr2;
 
     int** res_arr = malloc(m1 * sizeof(int*));
     for (int i = 0; i < m1; ++i) {
@@ -39,20 +39,22 @@ void *spawn(void* func_args) {
     }
 
     //Doing matmul
-
     for (int i = 0; i < m1; ++i) {
         for (int j = 0; j < n2; ++j) {
             res_arr[i][j] = 0;
             for (int k = 0; k < n1; ++k) {
-                res_arr[i][j] += arr1[i][k]*arr2[k][j];
+                res_arr[i][j] += arr1[i*n1 + k]*arr2[k*n2 + j];
             }
         }
     }
 
     //Copying to dest addr
     for (int i = 0; i < m1; ++i) {
-        memcpy(dest + i*n2*sizeof(int), res_arr[i], n2*sizeof(int));
+        for (int j = 0; j < n2; ++j) {
+            *(int*)(dest + i*n2*sizeof(int) + j*sizeof(int)) = res_arr[i][j];
+        }
     }
+
     return NULL;
 }
 
@@ -91,24 +93,32 @@ int main() {
 	perror("mmap");
 	exit(1);
     }
-    printf("%p\n", p);
+    //printf("%p\n", p);
+    //printf("SHMEM_00: %p\n", SHMEM_00);
+    //printf("SHMEM_01: %p\n", SHMEM_01);
+    //printf("SHMEM_10: %p\n", SHMEM_10);
+    //printf("SHMEM_11: %p\n", SHMEM_11);
     // Storing the shared memory
-    for (int i = 0; i < m1; ++i) {
-        for (int j = 0; j < n1/2; ++j) {
-            *(int*)(SHMEM_00 + i*m1*sizeof(int) + j) = arr1[i][j];
+    for (int i = 0; i < m1/2; ++i) {
+        for (int j = 0; j < n1; ++j) {
+            *(int*)(SHMEM_00 + i*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
         }
-        for (int j = n1/2; j < n1; ++j) {
-            *(int*)(SHMEM_01 + i*m1*sizeof(int) + j-n1/2) = arr1[i][j];
+    }
+    for (int i = m1/2; i < m1; ++i) {
+        for (int j = 0; j < n1; ++j) {
+            *(int*)(SHMEM_01 + (i-m1/2)*n1*sizeof(int) + j*sizeof(int)) = arr1[i][j];
         }
     }
     for (int i = 0; i < m2; ++i) {
         for (int j = 0; j < n2/2; ++j) {
-            *(int*)(SHMEM_10 + i*m2*sizeof(int) + j) = arr2[i][j];
+            *(int*)(SHMEM_10 + i*n2/2*sizeof(int) + j*sizeof(int)) = arr2[i][j];
         }
         for (int j = n2/2; j < n2; ++j) {
-            *(int*)(SHMEM_11 + i*m2*sizeof(int) + j-n2/2) = arr2[i][j];
+            *(int*)(SHMEM_11 + i*n2/2*sizeof(int) + (j-n2/2)*sizeof(int)) = arr2[i][j];
         }
     }
+
+    //printf("Written to shared memory locations\n");
 
 
     pthread_t thread_00; 
@@ -134,13 +144,13 @@ int main() {
     for (int i = 0; i < m1; ++i) {
         for (int j = 0; j < n2; ++j) {
             if (i < m1/2 && j < n2/2) 
-                resarr[i][j] = *(int*)(dest_00 + i*m1/2 * sizeof(int) + j);
+                resarr[i][j] = *(int*)(dest_00 + i*n2/2 * sizeof(int) + j*sizeof(int));
             if (i < m1/2 && j >= n2/2)
-                resarr[i][j] = *(int*)(dest_01 + (i)*sizeof(int) + (j - n2/2));
+                resarr[i][j] = *(int*)(dest_01 + (i)*sizeof(int)*n2/2 + (j - n2/2)*sizeof(int));
             if (i >= m1/2 && j < n2/2)
-                resarr[i][j] = *(int*)(dest_10 + (i - m1/2)*sizeof(int) + j);
+                resarr[i][j] = *(int*)(dest_10 + (i - m1/2)*sizeof(int)*n2/2 + j*sizeof(int));
             if (i >= m1/2 && j >= n2/2)
-                resarr[i][j] = *(int*)(dest_11 + (i-m1/2)*sizeof(int) + (j-n2/2));
+                resarr[i][j] = *(int*)(dest_11 + (i-m1/2)*sizeof(int)*n2/2 + (j-n2/2)*sizeof(int));
         }
     }
 
